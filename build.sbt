@@ -13,7 +13,8 @@ lazy val root = (project in file("."))
     libraryDependencies ++= Seq(
       "org.typelevel" %% "cats-core" % "2.1.0",  
       "org.scala-lang.modules" %% "scala-parser-combinators" % "1.1.2",
-      "com.beachape" %% "enumeratum" % "1.5.15"
+      "com.beachape" %% "enumeratum" % "1.5.15",
+      "org.typelevel" %% "cats-effect" % "2.1.2"
     )
   )
 
