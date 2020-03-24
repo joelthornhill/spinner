@@ -65,17 +65,18 @@ object App extends SpinParser with EquParser {
         wrax	dacr,0
       """.stripMargin
 
-    val getLines: List[String] = s.split("\n").toList.map(removeComment).filterNot(_.isEmpty)
+    val getLines: List[String] = s.split("\n").toList
+      .map(removeComment)
+      .filterNot(_.startsWith(";"))
+      .filterNot(_.isEmpty)
 
-//    val equParse: Map[String, EquValue] = getLines.flatMap(line =>
-//      parse(equParser, line) match {
-//        case Success(matched: Map[String, EquValue], _) => Some(matched)
-//        case Failure(msg, _)     => println(s"FAILURE: $msg"); None
-//        case Error(msg, _)       => println(s"ERROR: $msg"); None
-//      }
-//    ).flatten.toMap
-//
-//    equParse.toList.foreach(a => println(a.toString()))
+    val equParse: Map[String, EquValue] = getLines.flatMap(line =>
+      parse(equParser, line) match {
+        case Success(matched: Map[String, EquValue], _) => Some(matched)
+        case Failure(msg, _) => println(s"FAILURE: $msg"); None
+        case Error(msg, _) => println(s"ERROR: $msg"); None
+      }
+    ).flatten.toMap
 
 
     val spinParse: List[Instruction] = getLines.flatMap(line =>
@@ -89,7 +90,7 @@ object App extends SpinParser with EquParser {
 
     spinParse.foreach { a =>
       println(a.toString)
-//      a.run(equParse)
+      a.run(equParse )
     }
 
     println("Done")

@@ -1,6 +1,6 @@
 package example
 import example.EquParser.{EquDoubleValue, EquStringValue, EquValue}
-import example.ParserCombinator.{InstructionValue, Reserved, StringValue}
+import example.ParserCombinator.{DoubleValue, InstructionValue, Reserved, StringValue}
 import org.andrewkilpatrick.elmGen.ElmProgram
 
 object Instructions extends ElmProgram("blah") {
@@ -9,13 +9,22 @@ object Instructions extends ElmProgram("blah") {
     def run(map: Map[String, EquValue]): Unit
   }
 
-  def getAddr(addr: InstructionValue, map: Map[String, EquValue]) = addr match {
+  def getInt(addr: InstructionValue, map: Map[String, EquValue]) = addr match {
     case r: Reserved => r.reservedWord.value
     case s: StringValue => map.get(s.value).map {
       case v: EquStringValue => ReservedWord.withName(v.s.toUpperCase).value
       case _ => ???
     }.getOrElse(0)
   }
+
+  def getDouble(addr: InstructionValue, map: Map[String, EquValue]): Double = addr match {
+    case d: DoubleValue => d.value
+    case s: StringValue => map.get(s.value).map {
+      case v: EquStringValue => ReservedWord.withName(v.s.toUpperCase).value
+      case _ => ???
+    }.getOrElse(0)
+  }
+
 
   case class Rdax(addr: InstructionValue, scale: InstructionValue) extends Instruction {
     def run(map: Map[String, EquValue]) = readRegister(getAddr(addr, map), getAddr(scale, map))
@@ -47,8 +56,8 @@ object Instructions extends ElmProgram("blah") {
     override def toString: String = s"writeAllpass($addr, $scale)"
   }
 
-  case class Sof(scale: Double, offset: Double) extends Instruction {
-    def run(map: Map[String, EquValue]) = scaleOffset(scale, offset)
+  case class Sof(scale: InstructionValue, offset: InstructionValue) extends Instruction {
+    def run(map: Map[String, EquValue]) = ??? //scaleOffset(scale, offset)
 
     override def toString: String = s"scaleOffset($scale, $offset)"
   }
@@ -62,6 +71,10 @@ object Instructions extends ElmProgram("blah") {
     def run(map: Map[String, EquValue]) = allocDelayMem(name, value)
 
     override def toString = s"allocDelayMem($name, $value)"
+  }
+
+  case object EOF extends Instruction {
+    def run(map: Map[String, EquValue]) = ()
   }
 
 }
