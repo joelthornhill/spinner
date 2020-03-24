@@ -13,7 +13,7 @@ trait SpinParser extends RegexParsers {
 
   def parsed(instructions: Instructions): Parser[Instruction] = {
 
-    val wordRegex = """[a-z0-9-#_]+""".r
+    val wordRegex = """[a-z0-9-_]+""".r
     val integerRegex = """(-?[0-9]{1,10})""".r
     val doubleRegex = """-?[0-9]{1,10}([.][0-9]{0,10})?""".r
 
@@ -28,31 +28,38 @@ trait SpinParser extends RegexParsers {
     }
     def comma: Parser[String] = ",".r ^^ (_.toString)
     def eof: Parser[Instruction] = """^\s*$""".r ^^ (_ => instructions.EOF)
-    def clr: Parser[Instruction] = "clr".r ^^ (_ => instructions.Clr)
 
-    def reservedWords: Parser[Reserved] = """[a-z0-9]+""".r ^? {
+    def reservedWords: Parser[Reserved] = """[a-z0-9_]+""".r ^? {
       case v if Try(ReservedWord.withName(v.toUpperCase)).isSuccess =>
         Reserved(ReservedWord.withName(v.toUpperCase))
     }
 
-    def rdax: Parser[(MapsToInteger, MapsToDouble) => instructions.Rdax] = "rdax".r ^^ (_ => instructions.Rdax(_, _))
-    def rda: Parser[(MapsToInteger, MapsToDouble) => instructions.Rda] = "rda".r ^^ (_ => instructions.Rda(_, _))
-    def wrax: Parser[(MapsToInteger, MapsToDouble) => instructions.Wrax] = "wrax".r ^^ (_ => instructions.Wrax(_, _))
-    def wrap: Parser[(MapsToInteger, MapsToDouble) => instructions.Wrap] = "wrap".r ^^ (_ => instructions.Wrap(_, _))
-    def wra: Parser[(MapsToInteger, MapsToDouble) => instructions.Wra] = "wra".r ^^ (_ => instructions.Wra(_, _))
-    def sof: Parser[(MapsToDouble, MapsToDouble) => instructions.Sof] = "sof".r ^^ (_ => instructions.Sof(_, _))
-    def exp: Parser[(MapsToDouble, MapsToDouble) => instructions.Exp] = "exp".r ^^ (_ => instructions.Exp(_, _))
-    def mem: Parser[(String, MapsToInteger) => instructions.Mem] = "mem".r ^^ (_ => instructions.Mem(_, _))
-    def equ: Parser[(String, String) => instructions.Equ] = "equ".r ^^ (_ => instructions.Equ(_, _))
-    def skp: Parser[(MapsToInteger, MapsToInteger) => instructions.Skp] = "skp".r ^^ (_ => instructions.Skp(_, _))
-    def mulx: Parser[MapsToInteger => instructions.Mulx] = "mulx".r ^^ (_ => instructions.Mulx(_))
-    def wldr: Parser[
-    (MapsToInteger, MapsToInteger, MapsToInteger) => instructions.Wldr
-  ] = "wldr".r ^^ (_ => instructions.Wldr(_, _, _))
+    // Instructions
+    // TODO: rmpa, rdfx, wrhx, whlx, maxx, absa, log, and, or, xor, wlds, jam, nop, not
+    def rdax: Parser[(MapsToInteger, MapsToDouble) => instructions.Rdax] = "rdax".r ^^ (_ => instructions.Rdax)
+    def rda: Parser[(String, Double, MapsToDouble) => instructions.Rda] = "rda".r ^^ (_ => instructions.Rda)
+    def wrax: Parser[(MapsToInteger, MapsToDouble) => instructions.Wrax] = "wrax".r ^^ (_ => instructions.Wrax)
+    def wrap: Parser[(String, Double, MapsToDouble) => instructions.Wrap] = "wrap".r ^^ (_ => instructions.Wrap)
+    def wra: Parser[(String, Double, MapsToDouble) => instructions.Wra] = "wra".r ^^ (_ => instructions.Wra)
+    def sof: Parser[(MapsToDouble, MapsToDouble) => instructions.Sof] = "sof".r ^^ (_ => instructions.Sof)
+    def exp: Parser[(MapsToDouble, MapsToDouble) => instructions.Exp] = "exp".r ^^ (_ => instructions.Exp)
+    def mem: Parser[(String, MapsToInteger) => instructions.Mem] = "mem".r ^^ (_ => instructions.Mem)
+    def equ: Parser[(String, String) => instructions.Equ] = "equ".r ^^ (_ => instructions.Equ)
+    def skp: Parser[(MapsToInteger, MapsToInteger) => instructions.Skp] = "skp".r ^^ (_ => instructions.Skp)
+    def mulx: Parser[MapsToInteger => instructions.Mulx] = "mulx".r ^^ (_ => instructions.Mulx)
+    def wldr: Parser[(MapsToInteger, MapsToInteger, MapsToInteger) => instructions.Wldr] = "wldr".r ^^ (_ => instructions.Wldr)
     def cho: Parser[String] = "cho".r ^^ (_.toString)
     def crda: Parser[String] = "rda".r ^^ (_.toString)
-    def csfo: Parser[String] = "sfo".r ^^ (_.toString)
+    def csof: Parser[String] = "sof".r ^^ (_.toString)
+    def clr: Parser[Instruction] = "clr".r ^^ (_ => instructions.Clr)
+
+
     def bar: Parser[String] = "|" ^^ (_.toString)
+
+    // TODO: handle $ correctly
+    def hash: Parser[String] = "#" ^^ (_.toString)
+
+    // TODO: Handle Ors correctly
     def barWord: Parser[Option[String ~ String]] = opt(bar ~ word)
 
     def choRda: Parser[Instruction] =
@@ -61,35 +68,38 @@ trait SpinParser extends RegexParsers {
           instructions.ChoRda(lfo, flags, addr)
       }
     def choSfo: Parser[Instruction] =
-      cho ~ csfo ~ comma ~ reservedOrStringOrInt ~ comma ~ reservedOrStringOrInt ~ barWord ~ comma ~ reservedOrStringOrDouble ~ barWord ^^ {
+      cho ~ csof ~ comma ~ reservedOrStringOrInt ~ comma ~ reservedOrStringOrInt ~ barWord ~ comma ~ reservedOrStringOrDouble ~ barWord ^^ {
         case _ ~ _ ~ _ ~ lfo ~ _ ~ flags ~ _ ~ _ ~ offset ~ _ =>
-          instructions.ChoSfo(lfo, flags, offset)
+          instructions.ChoSof(lfo, flags, offset)
       }
 
-    def reservedOrStringOrDouble: Parser[MapsToDouble] =
-      reservedWords | doubleInstruction | instruction
-    def reservedOrStringOrInt: Parser[MapsToInteger] =
-      reservedWords | integerInstruction | instruction
+    def reservedOrStringOrDouble: Parser[MapsToDouble] = reservedWords | doubleInstruction | instruction
+    def reservedOrStringOrInt: Parser[MapsToInteger] = reservedWords | integerInstruction | instruction
 
     def equParser: Parser[Instruction] = equ ~ word ~ word ^^ {
       case _ ~ name ~ value => instructions.Equ(name, value)
     }
 
-    def twoDoubles = rdax | rda | wrax | wrap | wra
-    def twoInts = sof | exp
+    def integerDouble = rdax | wrax
+    def doubleDouble = sof | exp
+    def stringDoubleDouble = rda | wrap | wra
 
     def paramIntParamDouble: Parser[Instruction] =
-      twoDoubles ~ reservedOrStringOrInt ~ comma ~ reservedOrStringOrDouble ^^ {
+      integerDouble ~ reservedOrStringOrInt ~ comma ~ reservedOrStringOrDouble ^^ {
         case instruction ~ int ~ _ ~ double => instruction(int, double)
       }
 
     def paramDoubleParamDouble: Parser[Instruction] =
-      twoInts ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
+      doubleDouble ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
         case instruction ~ d1 ~ _ ~ d2 => instruction(d1, d2)
       }
 
     def memParser: Parser[Instruction] = mem ~ word ~ integerInstruction ^^ {
       case instruction ~ word ~ integer => instruction(word, integer)
+    }
+
+    def paramStringDoubleDouble: Parser[Instruction] = stringDoubleDouble ~ word ~ opt(hash) ~ comma ~ reservedOrStringOrDouble ^^ {
+      case instruction ~ word ~ hash ~ _  ~ double => instruction(word, hash.map(_ => 1.0).getOrElse(0.0), double)
     }
 
     def skpParser: Parser[Instruction] =
@@ -107,7 +117,7 @@ trait SpinParser extends RegexParsers {
           instruction(lfo, freq, amp)
       }
 
-    paramIntParamDouble | paramDoubleParamDouble | memParser | equParser | skpParser | clr | mulxParser | wldrParser | choRda | choSfo | eof
+    paramIntParamDouble | paramDoubleParamDouble | memParser | paramStringDoubleDouble | equParser | skpParser | clr | mulxParser | wldrParser | choRda | choSfo | eof
 
   }
 }
@@ -127,12 +137,6 @@ case object ParserCombinator {
       with MapsToDouble
 }
 
-//package example
-//import cats.effect.{ExitCode, IO, IOApp}
-//import example.EquParser.EquValue
-//import cats.implicits._
-//import example.Instruction.Instruction
-
 object App extends IOApp with EquParser with SpinParser {
 
   def removeComment(line: String) = {
@@ -150,6 +154,9 @@ object App extends IOApp with EquParser with SpinParser {
 
   def printInstructions(instructions: List[Instruction]): IO[List[Unit]] =
     instructions.map(i => IO(println(i))).sequence
+
+  def printRunInstructions(instructions: List[Instruction], m: Map[String, EquValue]): IO[List[Unit]] =
+    instructions.map(i => IO(println(i.runString(m)))).sequence
 
   def runInstructions(instructions: List[Instruction],
                       constants: Map[String, EquValue]): IO[List[Unit]] =
@@ -189,7 +196,7 @@ object App extends IOApp with EquParser with SpinParser {
         rda	api1#,kap	;do 4 APs
         wrap	api1,-kap
         rda	api2#,kap
-        wrap	api2,-cap
+        wrap	api2,-kap
         rda	api3#,kap
         wrap	api3,-kap
         rda	api4#,kap
@@ -260,11 +267,13 @@ object App extends IOApp with EquParser with SpinParser {
       parsed <- spinParse
       _ <- printInstructions(parsed)
       _ <- runInstructions(parsed, consts)
-      _ <- IO(println("Done"))
+      _ <- printRunInstructions(parsed, consts)
+      _ = instructions.setSamplerate(44100)
       sim <- IO(new SpinSimulator(instructions, testWav, null, 0.5, 0.5, 0.5))
       _ = sim.showInteractiveControls()
       _ = sim.showLevelLogger()
       _ = sim.setLoopMode(true)
+      _ <- IO(sim.run())
     } yield ()
 
 

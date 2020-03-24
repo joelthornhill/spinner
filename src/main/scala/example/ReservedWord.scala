@@ -163,58 +163,58 @@ object ReservedWord extends Enum[ReservedWord] {
   case object REG31 extends ReservedWord {
     val value = 63
   }
-  case object SKP_NEG extends ReservedWord {
+  case object NEG extends ReservedWord {
     val value = 1
   }
-  case object SKP_GEZ extends ReservedWord {
+  case object GEZ extends ReservedWord {
     val value = 2
   }
-  case object SKP_ZRO extends ReservedWord {
+  case object ZRO extends ReservedWord {
     val value = 4
   }
-  case object SKP_ZRC extends ReservedWord {
+  case object ZRC extends ReservedWord {
     val value = 8
   }
-  case object SKP_RUN extends ReservedWord {
+  case object RUN extends ReservedWord {
     val value = 16
   }
-  case object CHO_LFO_SIN0 extends ReservedWord {
+  case object SIN0 extends ReservedWord {
     val value = 0
   }
-  case object CHO_LFO_SIN1 extends ReservedWord {
+  case object SIN1 extends ReservedWord {
     val value = 1
   }
-  case object CHO_LFO_RMP0 extends ReservedWord {
+  case object RMP0 extends ReservedWord {
     val value = 2
   }
-  case object CHO_LFO_RMP1 extends ReservedWord {
+  case object RMP1 extends ReservedWord {
     val value = 3
   }
-  case object CHO_LFO_COS0 extends ReservedWord {
+  case object COS0 extends ReservedWord {
     val value = 4
   }
-  case object CHO_LFO_COS1 extends ReservedWord {
+  case object COS1 extends ReservedWord {
     val value = 5
   }
-  case object CHO_SIN extends ReservedWord {
+  case object SIN extends ReservedWord {
     val value = 0
   }
-  case object CHO_COS extends ReservedWord {
+  case object COS extends ReservedWord {
     val value = 1
   }
-  case object CHO_REG extends ReservedWord {
+  case object REG extends ReservedWord {
     val value = 2
   }
-  case object CHO_COMPC extends ReservedWord {
+  case object COMPC extends ReservedWord {
     val value = 4
   }
-  case object CHO_COMPA extends ReservedWord {
+  case object COMPA extends ReservedWord {
     val value = 8
   }
-  case object CHO_RPTR2 extends ReservedWord {
+  case object RPTR2 extends ReservedWord {
     val value = 16
   }
-  case object CHO_NA extends ReservedWord {
+  case object NA extends ReservedWord {
     val value = 32
   }
 }
