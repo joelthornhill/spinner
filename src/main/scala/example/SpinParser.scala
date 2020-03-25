@@ -5,27 +5,51 @@ import example.ParserCombinator._
 import scala.util.Try
 import scala.util.parsing.combinator._
 
-trait SpinParser[F[_]] extends RegexParsers {
+trait CommonParsers extends RegexParsers with ReservedWordsParser {
+
+  val wordRegex = """[a-zA-Z0-9-_+]+""".r
+  val integerRegex = """(-?[0-9]{1,10})""".r
+  val doubleRegex = """-?[0-9]{1,10}([.][0-9]{0,10})?""".r
+
+  def word: Parser[String] = wordRegex ^^ { _.toString }
+  def comma: Parser[String] = ",".r ^^ (_.toString)
+  def instruction: Parser[StringValue] = wordRegex ^^ { a => StringValue(a.toString) }
+  def doubleInstruction: Parser[DoubleValue] =
+    doubleRegex ^^ (d => DoubleValue(d.toDouble))
+  def integerInstruction: Parser[MapsToInteger] = integerRegex ^^ { a => IntegerValue(a.toInt) }
+
+  // TODO: handle $ correctly
+  def hash: Parser[String] = "#" ^^ (_.toString)
+
+  def bar: Parser[String] = "|" ^^ (_.toString)
+
+  // TODO: Handle Ors correctly
+  def barWord: Parser[Option[String ~ String]] = opt(bar ~ word)
+
+  def loop: Parser[MapsToInteger] = "loop".r ^^ { a => StringValue(a.toString) }
+
+  def reservedOrStringOrDouble: Parser[MapsToDouble] =
+    reservedWords | doubleInstruction | instruction
+  def reservedOrStringOrInt: Parser[MapsToInteger] =
+    reservedWords | integerInstruction | instruction
+  def reservedOrStringOrIntOrLoop = reservedOrStringOrInt | loop
+
+}
+
+trait ReservedWordsParser extends RegexParsers {
+
+  def reservedWords: Parser[Reserved] = """[a-zA-Z0-9_]+""".r ^? {
+    case v if Try(ReservedWord.withName(v.toUpperCase)).isSuccess =>
+      Reserved(ReservedWord.withName(v.toUpperCase))
+  }
+
+}
+
+trait SpinParser[F[_]] extends RegexParsers with CommonParsers with ReservedWordsParser {
 
   def parsed(instructions: Instructions[F]): Parser[Instruction[F]] = {
 
-    val wordRegex = """[a-zA-Z0-9-_+]+""".r
-    val integerRegex = """(-?[0-9]{1,10})""".r
-    val doubleRegex = """-?[0-9]{1,10}([.][0-9]{0,10})?""".r
-
-    def word: Parser[String] = wordRegex ^^ { _.toString }
-    def instruction: Parser[StringValue] = wordRegex ^^ { a => StringValue(a.toString) }
-    def doubleInstruction: Parser[DoubleValue] =
-      doubleRegex ^^ (d => DoubleValue(d.toDouble))
-    def integerInstruction: Parser[MapsToInteger] = integerRegex ^^ { a => IntegerValue(a.toInt) }
-    def loop: Parser[MapsToInteger] = "loop".r ^^ { a => StringValue(a.toString) }
-    def comma: Parser[String] = ",".r ^^ (_.toString)
     def eof: Parser[Instruction[F]] = """^\s*$""".r ^^ (_ => instructions.EOF)
-
-    def reservedWords: Parser[Reserved] = """[a-zA-Z0-9_]+""".r ^? {
-      case v if Try(ReservedWord.withName(v.toUpperCase)).isSuccess =>
-        Reserved(ReservedWord.withName(v.toUpperCase))
-    }
 
     // Instructions
     // TODO: maxx, absa, log, and, or, xor, jam, nop, not
@@ -76,15 +100,11 @@ trait SpinParser[F[_]] extends RegexParsers {
           instructions.Wldr(lfo, freq, amp)
       }
 
-    def wrlxParser: Parser[Instruction[F]] =
-      "wrlx".r ~ reservedOrStringOrInt ~ comma ~ reservedOrStringOrDouble ^^ {
-        case _ ~ addr ~ _ ~ scale => instructions.Wrlx(addr, scale)
-      }
+    def wrlx: Parser[(MapsToInteger, MapsToDouble) => instructions.Wrlx] =
+      "wrlx".r ^^ (_ => instructions.Wrlx)
 
-    def wrhxParser: Parser[Instruction[F]] =
-      "wrhx".r ~ reservedOrStringOrInt ~ comma ~ reservedOrStringOrDouble ^^ {
-        case _ ~ addr ~ _ ~ scale => instructions.Wrhx(addr, scale)
-      }
+    def wrhx: Parser[(MapsToInteger, MapsToDouble) => instructions.Wrhx] =
+      "wrhx".r ^^ (_ => instructions.Wrhx)
 
     def wldsParser: Parser[Instruction[F]] =
       "wlds".r ~ reservedOrStringOrInt ~ comma ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
@@ -101,13 +121,6 @@ trait SpinParser[F[_]] extends RegexParsers {
 
     def cho: Parser[String] = "cho".r ^^ (_.toString)
     def clr: Parser[Instruction[F]] = "clr".r ^^ (_ => instructions.Clr)
-    def bar: Parser[String] = "|" ^^ (_.toString)
-
-    // TODO: handle $ correctly
-    def hash: Parser[String] = "#" ^^ (_.toString)
-
-    // TODO: Handle Ors correctly
-    def barWord: Parser[Option[String ~ String]] = opt(bar ~ word)
 
     def choRda: Parser[Instruction[F]] =
       cho ~ "rda".r ~ comma ~ reservedOrStringOrInt ~ comma ~ reservedOrStringOrInt ~ barWord ~ barWord ~ comma ~ reservedOrStringOrInt ~ barWord ^^ {
@@ -125,36 +138,27 @@ trait SpinParser[F[_]] extends RegexParsers {
         case _ ~ _ ~ _ ~ lfo => instructions.ChoRdal(lfo)
       }
 
-    def reservedOrStringOrDouble: Parser[MapsToDouble] =
-      reservedWords | doubleInstruction | instruction
-    def reservedOrStringOrInt: Parser[MapsToInteger] =
-      reservedWords | integerInstruction | instruction
-
-    def reservedOrStringOrIntOrLoop = reservedOrStringOrInt | loop
-
-    def integerDouble = rdax | wrax | rdfx
-    def doubleDouble = sof | exp | log
-    def stringDoubleDouble = rda | wrap | wra
+    def choParser = choRda | choSfo | choRdal
 
     def paramIntParamDouble: Parser[Instruction[F]] =
-      integerDouble ~ reservedOrStringOrInt ~ comma ~ reservedOrStringOrDouble ^^ {
+      (rdax | wrax | rdfx | wrhx | wrlx) ~ reservedOrStringOrInt ~ comma ~ reservedOrStringOrDouble ^^ {
         case instruction ~ int ~ _ ~ double => instruction(int, double)
       }
 
     def paramDoubleParamDouble: Parser[Instruction[F]] =
-      doubleDouble ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
+      (sof | exp | log) ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
         case instruction ~ d1 ~ _ ~ d2 => instruction(d1, d2)
       }
 
     def paramStringDoubleDouble: Parser[Instruction[F]] =
-      stringDoubleDouble ~ word ~ opt(hash) ~ comma ~ reservedOrStringOrDouble ^^ {
+      (rda | wrap | wra) ~ word ~ opt(hash) ~ comma ~ reservedOrStringOrDouble ^^ {
         case instruction ~ word ~ hash ~ _ ~ double =>
           instruction(word, hash.map(_ => 1.0).getOrElse(0.0), double)
       }
 
     def loopParser: Parser[Instruction[F]] = "loop".r ^^ (_ => instructions.Loop)
 
-    paramIntParamDouble | paramDoubleParamDouble | memParser | paramStringDoubleDouble | equParser | skpParser | clr | mulxParser | wldrParser | wrlxParser | wrhxParser | andParser | orParser | wldsParser | choRda | choSfo | choRdal | rmpa | loopParser | eof
+    paramIntParamDouble | paramDoubleParamDouble | memParser | paramStringDoubleDouble | equParser | skpParser | clr | mulxParser | wldrParser | andParser | orParser | wldsParser | choParser | rmpa | loopParser | eof
 
   }
 }
