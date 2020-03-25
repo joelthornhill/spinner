@@ -1,5 +1,5 @@
 package example
-import cats.effect.{ExitCode, IO, IOApp}
+import cats.effect.{ExitCode, IO, IOApp, Resource, Sync}
 import example.EquParser.EquValue
 import example.Instruction.Instruction
 import example.ParserCombinator._
@@ -148,20 +148,20 @@ object App extends IOApp with EquParser with SpinParser {
     else line.splitAt(index)._1
   }
 
-  def printVals(m: Map[String, EquValue]): IO[List[Unit]] =
+  def printVals[F[_]: Sync](m: Map[String, EquValue]): F[List[Unit]] =
     m.toList.map { value =>
-      IO(println(s"val ${value._1} = ${value._2}"))
+      Sync[F].delay(println(s"val ${value._1} = ${value._2}"))
     }.sequence
 
-  def printInstructions(instructions: List[Instruction]): IO[List[Unit]] =
-    instructions.map(i => IO(println(i))).sequence
+  def printInstructions[F[_]: Sync](instructions: List[Instruction]): F[List[Unit]] =
+    instructions.map(i => Sync[F].delay(println(i))).sequence
 
-  def printRunInstructions(instructions: List[Instruction], m: Map[String, EquValue]): IO[List[Unit]] =
-    instructions.map(i => IO(println(i.runString(m)))).sequence
+  def printRunInstructions[F[_]: Sync](instructions: List[Instruction], m: Map[String, EquValue]): F[List[Unit]] =
+    instructions.map(i => Sync[F].delay(println(i.runString(m)))).sequence
 
-  def runInstructions(instructions: List[Instruction],
-                      constants: Map[String, EquValue]): IO[List[Unit]] =
-    instructions.map(i => IO(i.run(constants))).sequence
+  def runInstructions[F[_]: Sync](instructions: List[Instruction],
+                      constants: Map[String, EquValue]): F[List[Unit]] =
+    instructions.map(i => Sync[F].delay(i.run(constants))).sequence
 
   def run(args: List[String]): IO[ExitCode] = {
 
@@ -172,7 +172,7 @@ object App extends IOApp with EquParser with SpinParser {
       .filterNot(_.startsWith(";"))
       .filterNot(_.isEmpty)
 
-    def constants(s: String): IO[Map[String, EquValue]] = IO(
+    def constants[F[_]: Sync](s: String): F[Map[String, EquValue]] = Sync[F].delay(
       getLines(s)
         .flatMap(
           line =>
@@ -188,7 +188,7 @@ object App extends IOApp with EquParser with SpinParser {
 
     val instructions = new Instructions()
 
-    def spinParse(s: String): IO[List[Instruction]] = IO(
+    def spinParse[F[_]: Sync](s: String): F[List[Instruction]] = Sync[F].delay(
       getLines(s)
         .flatMap(
           line =>
@@ -206,12 +206,12 @@ object App extends IOApp with EquParser with SpinParser {
     val testWav = "/tmp/test.wav"
     val filePath = "/tmp/test.spn"
 
-    // TODO: make this and the simulator a resource
-    val fileContents = IO(Source.fromFile(filePath).getLines.mkString("\n"))
+    def fileContents[F[_]: Sync] = Resource
+    .fromAutoCloseable(Sync[F].delay(Source.fromFile(filePath)))
+    .use(source => Sync[F].delay(source.getLines.mkString("\n")))
 
-    val program = for {
+    def program[F[_]: Sync] = for {
       file <- fileContents
-      _ <- IO(println(file))
       consts <- constants(file)
       _ <- printVals(consts)
       parsed <- spinParse(file)
@@ -219,15 +219,15 @@ object App extends IOApp with EquParser with SpinParser {
       _ <- runInstructions(parsed, consts)
       _ <- printRunInstructions(parsed, consts)
       _ = instructions.setSamplerate(44100)
-      sim <- IO(new SpinSimulator(instructions, testWav, null, 0.5, 0.5, 0.5))
+      sim <- Sync[F].delay(new SpinSimulator(instructions, testWav, null, 0.5, 0.5, 0.5))
       _ = sim.showInteractiveControls()
       _ = sim.showLevelLogger()
       _ = sim.setLoopMode(true)
-      _ <- IO(sim.run())
+      _ <- Sync[F].delay(sim.run())
     } yield ()
 
 
-    program.as(ExitCode.Success)
+    program[IO].as(ExitCode.Success)
 
   }
 }
