@@ -11,12 +11,12 @@ trait EquParser extends RegexParsers {
   private val doubleRegex = """-?[0-9]{1,10}([.][0-9]{0,10})?""".r
   private val integerRegex = """(-?[0-9]{1,10})""".r
 
-  private def word: Parser[String]   = wordRegex ^^ { _.toString }
-  private def equWord: Parser[EquStringValue]   = wordRegex ^^ ( s => EquStringValue(s.toString) )
-  private def double: Parser[EquDoubleValue] = doubleRegex ^^ ( d => EquDoubleValue(d.toDouble) )
-  private def integer: Parser[EquValue] = integerRegex ^^ ( d => EquIntegerValue(d.toInt) )
-  private def equ: Parser[String]    = "equ".r ^^ ( _.toString )
-  def mem: Parser[String] = "mem".r ^^ ( _.toString )
+  private def word: Parser[String] = wordRegex ^^ { _.toString }
+  private def equWord: Parser[EquStringValue] = wordRegex ^^ (s => EquStringValue(s.toString))
+  private def double: Parser[EquDoubleValue] = doubleRegex ^^ (d => EquDoubleValue(d.toDouble))
+  private def integer: Parser[EquValue] = integerRegex ^^ (d => EquIntegerValue(d.toInt))
+  private def equ: Parser[String] = "equ".r ^^ (_.toString)
+  def mem: Parser[String] = "mem".r ^^ (_.toString)
   private def stringOrDouble: Parser[EquValue] = double | equWord
   private def stringOrInt: Parser[EquValue] = integer | equWord
 
@@ -28,7 +28,7 @@ trait EquParser extends RegexParsers {
     case _ ~ key ~ value => Map(key -> value)
   }
 
-  private def anythingElse: Parser[Map[String, EquValue]] =  """.*""".r ^^ (_ => Map.empty )
+  private def anythingElse: Parser[Map[String, EquValue]] = """.*""".r ^^ (_ => Map.empty)
 
   def equParser: Parser[Map[String, EquValue]] = equStringInstruction | memParser | anythingElse
 }
