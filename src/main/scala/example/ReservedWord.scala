@@ -1,8 +1,6 @@
 package example
 import enumeratum.EnumEntry
 import enumeratum._
-import enumeratum.EnumEntry._
-import example.ParserCombinator.Reserved
 
 sealed trait ReservedWord extends EnumEntry {
   val value: Int
