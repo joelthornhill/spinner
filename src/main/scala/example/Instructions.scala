@@ -1,59 +1,55 @@
 package example
 import cats.effect.Sync
-import example.EquParser.EquDoubleValue
-import example.EquParser.EquIntegerValue
-import example.EquParser.EquStringValue
-import example.EquParser.EquValue
 import example.Instruction.Instruction
 import example.ParserCombinator._
 import org.andrewkilpatrick.elmGen.ElmProgram
 import cats.syntax.flatMap._
 import cats.syntax.functor._
 
-class Instructions[F[_]: Sync](consts: Map[String, EquValue]) extends ElmProgram("Parser") {
+class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends ElmProgram("Parser") {
 
-  def getInt(addr: MapsToInteger): F[Int] = {
+  def getInt(addr: InstructionValue): F[Int] =
+    getDouble(addr).flatMap(d => Sync[F].catchNonFatal(d.toInt))
+
+  def getDouble(addr: InstructionValue): F[Double] = {
     addr match {
-      case reserved: Reserved         => Sync[F].pure(reserved.reservedWord.value)
-      case integerValue: IntegerValue => Sync[F].pure(integerValue.value)
-      case stringValue: StringValue =>
-        getReservedInt(stringValue.value).fold[F[Int]](
-          Sync[F].raiseError(new Exception(s"Could not find: $stringValue"))
-        )(Sync[F].pure)
+      case Reserved(reservedWord) => Sync[F].pure(reservedWord.value.toDouble)
+      case DoubleValue(value)     => Sync[F].pure(value)
+      case StringValue(value)     => findInConsts(value)
+      case WithArithmetic(value)  => calculateArithmetic(value)
     }
   }
 
-  def getReservedInt(s: String): Option[Int] = {
-    consts.get(s).flatMap {
-      case equString: EquStringValue =>
-        Some(ReservedWord.withName(equString.value.toUpperCase).value)
-      case equInteger: EquIntegerValue =>
-        Some(equInteger.value)
-      case _ => None
+  def findInConsts(s: String): F[Double] = {
+    Sync[F].pure(consts.get(s)).flatMap {
+      case Some(StringValue(value)) =>
+        Sync[F].catchNonFatal(ReservedWord.withName(value.toUpperCase).value.toDouble)
+      case Some(DoubleValue(value))    => Sync[F].pure(value)
+      case Some(WithArithmetic(value)) => calculateArithmetic(value)
+      case _                           => Sync[F].raiseError(new Exception(s"Could not find: $s"))
     }
   }
 
-  def getReservedDouble(s: String): Option[Double] = {
-    consts.get(s).flatMap {
-      case equDoubleValue: EquDoubleValue   => Some(equDoubleValue.value)
-      case equIntegerValue: EquIntegerValue => Some(equIntegerValue.value.toDouble)
-      case _                                => None
+  def calculateArithmetic(arithmetic: Arithmetic): F[Double] = {
+    arithmetic match {
+      case Division(a, b) =>
+        for {
+          a <- getDouble(a)
+          b <- getDouble(b)
+        } yield a / b
+      case Minus(a) => getDouble(a).map(-_)
+      case Multiplication(a, b) =>
+        for {
+          a <- getDouble(a)
+          b <- getDouble(b)
+        } yield a * b
+      case DelayEnd(a)            => getDouble(a) // Fix
+      case MidpointDelay(a)       => getDouble(a) // Fix
+      case ParserCombinator.Or(a) => getDouble(a.head) // Fix
     }
   }
 
-  def getDouble(addr: MapsToDouble): F[Double] = {
-    val doubleValue = addr match {
-      case d: DoubleValue => Some(d.value)
-      case s: StringValue => getReservedDouble(s.value)
-      case _              => None
-    }
-
-    doubleValue.fold[F[Double]](Sync[F].raiseError(new Exception(s"Could not find: $addr")))(
-      Sync[F].pure
-    )
-  }
-
-  case class Rdax(addr: MapsToInteger, scale: MapsToDouble) extends Instruction[F] {
+  case class Rdax(addr: InstructionValue, scale: InstructionValue) extends Instruction[F] {
     def run(): F[Unit] =
       for {
         addr <- getInt(addr)
@@ -64,13 +60,13 @@ class Instructions[F[_]: Sync](consts: Map[String, EquValue]) extends ElmProgram
     override def toString = s"readRegister(${addr.toString}, $scale)"
   }
 
-  case class Rda(memName: String, offset: Double, scale: MapsToDouble) extends Instruction[F] {
+  case class Rda(memName: String, offset: Double, scale: InstructionValue) extends Instruction[F] {
     def run() = getDouble(scale).flatMap(scale => Sync[F].delay(readDelay(memName, offset, scale)))
 
     override def toString: String = s"readDelay($memName, $offset, $scale)"
   }
 
-  case class Wrax(addr: MapsToInteger, scale: MapsToDouble) extends Instruction[F] {
+  case class Wrax(addr: InstructionValue, scale: InstructionValue) extends Instruction[F] {
     def run() =
       for {
         addr <- getInt(addr)
@@ -81,7 +77,7 @@ class Instructions[F[_]: Sync](consts: Map[String, EquValue]) extends ElmProgram
     override def toString = s"writeRegister($addr, $scale)"
   }
 
-  case class Wrap(memName: String, offset: Double, scale: MapsToDouble) extends Instruction[F] {
+  case class Wrap(memName: String, offset: Double, scale: InstructionValue) extends Instruction[F] {
     def run() =
       getDouble(scale).flatMap(scale => Sync[F].delay(writeAllpass(memName, offset, scale)))
     def runString() = s"writeAllpass($memName, $offset, ${getDouble(scale)})"
@@ -89,13 +85,13 @@ class Instructions[F[_]: Sync](consts: Map[String, EquValue]) extends ElmProgram
     override def toString: String = s"writeAllpass($memName, $offset, $scale)"
   }
 
-  case class Wra(memName: String, offset: Double, scale: MapsToDouble) extends Instruction[F] {
+  case class Wra(memName: String, offset: Double, scale: InstructionValue) extends Instruction[F] {
     def run() = getDouble(scale).flatMap(scale => Sync[F].delay(writeDelay(memName, offset, scale)))
 
     override def toString: String = s"writeDelay($memName, $offset, $scale)"
   }
 
-  case class Sof(scale: MapsToDouble, offset: MapsToDouble) extends Instruction[F] {
+  case class Sof(scale: InstructionValue, offset: InstructionValue) extends Instruction[F] {
     def run() =
       for {
         scale <- getDouble(scale)
@@ -111,7 +107,7 @@ class Instructions[F[_]: Sync](consts: Map[String, EquValue]) extends ElmProgram
     override def toString = ""
   }
 
-  case class Mem(name: String, value: MapsToInteger) extends Instruction[F] {
+  case class Mem(name: String, value: InstructionValue) extends Instruction[F] {
     def run() = getInt(value).flatMap(size => Sync[F].delay(allocDelayMem(name, size)))
 
     override def toString = s"allocDelayMem($name, $value)"
@@ -121,7 +117,7 @@ class Instructions[F[_]: Sync](consts: Map[String, EquValue]) extends ElmProgram
     def run() = Sync[F].unit
   }
 
-  case class Skp(flags: MapsToInteger, nSkip: MapsToInteger) extends Instruction[F] {
+  case class Skp(flags: InstructionValue, nSkip: InstructionValue) extends Instruction[F] {
     def run() =
       for {
         flags <- getInt(flags)
@@ -138,7 +134,7 @@ class Instructions[F[_]: Sync](consts: Map[String, EquValue]) extends ElmProgram
     override def toString: String = "clear()"
   }
 
-  case class Exp(scale: MapsToDouble, offset: MapsToDouble) extends Instruction[F] {
+  case class Exp(scale: InstructionValue, offset: InstructionValue) extends Instruction[F] {
     def run() =
       for {
         scale <- getDouble(scale)
@@ -149,13 +145,13 @@ class Instructions[F[_]: Sync](consts: Map[String, EquValue]) extends ElmProgram
     override def toString: String = s"exp($scale, $offset)"
   }
 
-  case class Mulx(addr: MapsToInteger) extends Instruction[F] {
+  case class Mulx(addr: InstructionValue) extends Instruction[F] {
     def run() = getInt(addr).flatMap(a => Sync[F].delay(mulx(a)))
 
     override def toString: String = s"mulx($addr)"
   }
 
-  case class Wldr(lfo: MapsToInteger, freq: MapsToInteger, amp: MapsToInteger)
+  case class Wldr(lfo: InstructionValue, freq: InstructionValue, amp: InstructionValue)
       extends Instruction[F] {
     def run() =
       for {
@@ -168,7 +164,7 @@ class Instructions[F[_]: Sync](consts: Map[String, EquValue]) extends ElmProgram
     override def toString: String = s"loadRampLFO($lfo, $freq, $amp)"
   }
 
-  case class ChoRda(lfo: MapsToInteger, flags: MapsToInteger, addr: MapsToInteger)
+  case class ChoRda(lfo: InstructionValue, flags: InstructionValue, addr: InstructionValue)
       extends Instruction[F] {
     def run() =
       for {
@@ -181,7 +177,7 @@ class Instructions[F[_]: Sync](consts: Map[String, EquValue]) extends ElmProgram
     override def toString: String = s"chorusReadDelay($lfo, $flags, $addr)"
   }
 
-  case class ChoSof(lfo: MapsToInteger, flags: MapsToInteger, offset: MapsToDouble)
+  case class ChoSof(lfo: InstructionValue, flags: InstructionValue, offset: InstructionValue)
       extends Instruction[F] {
     def run() =
       for {
@@ -194,13 +190,13 @@ class Instructions[F[_]: Sync](consts: Map[String, EquValue]) extends ElmProgram
     override def toString: String = s"chorusReadDelay($lfo, $flags, $offset)"
   }
 
-  case class ChoRdal(lfo: MapsToInteger) extends Instruction[F] {
+  case class ChoRdal(lfo: InstructionValue) extends Instruction[F] {
     def run() = getInt(lfo).flatMap(lfo => Sync[F].delay(chorusReadValue(lfo)))
 
     override def toString: String = s"chorusReadValue($lfo)"
   }
 
-  case class Wlds(lfo: MapsToInteger, freq: MapsToDouble, amp: MapsToDouble)
+  case class Wlds(lfo: InstructionValue, freq: InstructionValue, amp: InstructionValue)
       extends Instruction[F] {
     def run() =
       for {
@@ -213,7 +209,7 @@ class Instructions[F[_]: Sync](consts: Map[String, EquValue]) extends ElmProgram
     override def toString: String = s"loadSinLFO($lfo, $freq, $amp)"
   }
 
-  case class Rdfx(addr: MapsToInteger, scale: MapsToDouble) extends Instruction[F] {
+  case class Rdfx(addr: InstructionValue, scale: InstructionValue) extends Instruction[F] {
 
     def run() =
       for {
@@ -226,13 +222,13 @@ class Instructions[F[_]: Sync](consts: Map[String, EquValue]) extends ElmProgram
 
   }
 
-  case class Rmpa(scale: MapsToDouble) extends Instruction[F] {
+  case class Rmpa(scale: InstructionValue) extends Instruction[F] {
     def run() = getDouble(scale).flatMap(scale => Sync[F].delay(readDelayPointer(scale)))
 
     override def toString: String = s"readDelayPointer($scale)"
   }
 
-  case class Wrlx(addr: MapsToInteger, scale: MapsToDouble) extends Instruction[F] {
+  case class Wrlx(addr: InstructionValue, scale: InstructionValue) extends Instruction[F] {
     def run() =
       for {
         addr <- getInt(addr)
@@ -243,7 +239,7 @@ class Instructions[F[_]: Sync](consts: Map[String, EquValue]) extends ElmProgram
     override def toString: String = s"writeRegisterLowshelf($addr, $scale)"
   }
 
-  case class Wrhx(addr: MapsToInteger, scale: MapsToDouble) extends Instruction[F] {
+  case class Wrhx(addr: InstructionValue, scale: InstructionValue) extends Instruction[F] {
     def run() =
       for {
         addr <- getInt(addr)
@@ -254,7 +250,7 @@ class Instructions[F[_]: Sync](consts: Map[String, EquValue]) extends ElmProgram
     override def toString: String = s"writeRegisterHighshelf($addr, $scale)"
   }
 
-  case class Log(scale: MapsToDouble, offset: MapsToDouble) extends Instruction[F] {
+  case class Log(scale: InstructionValue, offset: InstructionValue) extends Instruction[F] {
     def run() =
       for {
         scale <- getDouble(scale)
@@ -265,13 +261,13 @@ class Instructions[F[_]: Sync](consts: Map[String, EquValue]) extends ElmProgram
     override def toString: String = s"log($scale, $offset)"
   }
 
-  case class And(mask: MapsToInteger) extends Instruction[F] {
+  case class And(mask: InstructionValue) extends Instruction[F] {
     def run() = getInt(mask).flatMap(mask => Sync[F].delay(and(mask)))
 
     override def toString: String = s"and($mask)"
   }
 
-  case class Or(mask: MapsToInteger) extends Instruction[F] {
+  case class Or(mask: InstructionValue) extends Instruction[F] {
     def run() = getInt(mask).flatMap(mask => Sync[F].delay(or(mask)))
 
     override def toString: String = s"or($mask)"

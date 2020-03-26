@@ -1,10 +1,10 @@
 package example
 import cats.effect.Resource
 import cats.effect.Sync
-import example.EquParser.EquValue
 import example.Instruction.Instruction
 import org.andrewkilpatrick.elmGen.simulator.SpinSimulator
 import cats.implicits._
+import example.ParserCombinator.InstructionValue
 
 import scala.io.Source
 
@@ -18,7 +18,7 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
     else line.splitAt(index)._1
   }
 
-  def printVals(m: Map[String, EquValue]): F[List[Unit]] =
+  def printVals(m: Map[String, InstructionValue]): F[List[Unit]] =
     m.toList.map { value => Sync[F].delay(println(s"val ${value._1} = ${value._2}")) }.sequence
 
   def printInstructions(instructions: List[Instruction[F]]): F[List[Unit]] =
@@ -35,13 +35,13 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
       .filterNot(_.startsWith(";"))
       .filterNot(_.isEmpty)
 
-  def constants(s: String): F[Map[String, EquValue]] = Sync[F].delay(
+  def constants(s: String): F[Map[String, InstructionValue]] = Sync[F].delay(
     getLines(s)
       .flatMap(line =>
         parse(equParser, line) match {
-          case Success(matched: Map[String, EquValue], _) => Some(matched)
-          case Failure(msg, _)                            => println(s"FAILURE: $msg"); None
-          case Error(msg, _)                              => println(s"ERROR: $msg"); None
+          case Success(matched: Map[String, InstructionValue], _) => Some(matched)
+          case Failure(msg, _)                                    => println(s"FAILURE: $msg"); None
+          case Error(msg, _)                                      => println(s"ERROR: $msg"); None
         }
       )
       .flatten
@@ -82,7 +82,7 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
       _ = sim.showInteractiveControls()
       _ = sim.showLevelLogger()
       _ = sim.setLoopMode(true)
-//      _ <- Sync[F].delay(sim.run())
+      _ <- Sync[F].delay(sim.run())
     } yield ()
   }
 }

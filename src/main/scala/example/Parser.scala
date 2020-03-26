@@ -1,0 +1,59 @@
+package example
+
+import example.ParserCombinator._
+
+import scala.util.parsing.combinator.RegexParsers
+
+trait Parser extends RegexParsers {
+  private val wordRegex = """[a-zA-Z0-9#_]+""".r
+  private val doubleRegex = """[0-9]{1,10}([.][0-9]{1,10})?""".r
+
+  private def singleWord: Parser[InstructionValue] = opt("-".r) ~ wordRegex ^^ {
+    case Some(_) ~ word => WithArithmetic(Minus(StringValue(word)))
+    case None ~ word    => StringValue(word)
+  }
+
+  private def singleDouble: Parser[InstructionValue] = opt("-".r) ~ doubleRegex ^^ {
+    case Some(_) ~ double => WithArithmetic(Minus(DoubleValue(double.toDouble)))
+    case None ~ double    => DoubleValue(double.toDouble)
+  }
+
+  def doubleWithDivision: Parser[InstructionValue] =
+    singleDouble ~ "/".r ~ opt(singleDouble) ~ opt(singleWord) ^^ {
+      case double ~ _ ~ Some(divideBy) ~ None => WithArithmetic(Division(double, divideBy))
+      case double ~ _ ~ None ~ Some(divideBy) => WithArithmetic(Division(double, divideBy))
+      case double ~ _ ~ _ ~ _                 => double
+    }
+
+  def doubleWithMultiplication: Parser[InstructionValue] =
+    singleDouble ~ "\\*".r ~ opt(singleDouble) ~ opt(singleWord) ^^ {
+      case double ~ _ ~ Some(multiplier) ~ None =>
+        WithArithmetic(Multiplication(double, multiplier))
+      case double ~ _ ~ None ~ Some(multiplier) =>
+        WithArithmetic(Multiplication(double, multiplier))
+      case double ~ _ ~ _ ~ _ => double
+    }
+
+  def wordWithDivision: Parser[InstructionValue] =
+    singleWord ~ "/".r ~ opt(singleDouble) ~ opt(singleWord) ^^ {
+      case word ~ _ ~ Some(divideBy) ~ None => WithArithmetic(Division(word, divideBy))
+      case word ~ _ ~ None ~ Some(divideBy) => WithArithmetic(Division(word, divideBy))
+      case word ~ _ ~ _ ~ _                 => word
+    }
+
+  def wordWithMultiplication: Parser[InstructionValue] =
+    singleWord ~ "\\*".r ~ opt(singleDouble) ~ opt(singleWord) ^^ {
+      case word ~ _ ~ Some(multiplier) ~ None => WithArithmetic(Multiplication(word, multiplier))
+      case word ~ _ ~ None ~ Some(multiplier) => WithArithmetic(Multiplication(word, multiplier))
+      case word ~ _ ~ _ ~ _                   => word
+    }
+
+  def word: Parser[InstructionValue] = wordWithDivision | wordWithMultiplication | singleWord
+
+  def double: Parser[InstructionValue] =
+    doubleWithDivision | doubleWithMultiplication | singleDouble
+//  case class DelayEnd(a: InstructionValue) extends Arithmetic
+//  case class MidpointDelay(a: InstructionValue) extends Arithmetic
+//  case class Or(a: List[InstructionValue]) extends Arithmetic
+
+}
