@@ -42,6 +42,8 @@ trait SpinParser[F[_]] extends RegexParsers with CommonParsers with ReservedWord
       "wrap".r ^^ (_ => instructions.Wrap)
     def wra: Parser[(String, Double, InstructionValue) => instructions.Wra] =
       "wra".r ^^ (_ => instructions.Wra)
+    def wra2: Parser[(InstructionValue, InstructionValue) => instructions.Wra2] =
+      "wra".r ^^ (_ => instructions.Wra2)
     def sof: Parser[(InstructionValue, InstructionValue) => instructions.Sof] =
       "sof".r ^^ (_ => instructions.Sof)
     def exp: Parser[(InstructionValue, InstructionValue) => instructions.Exp] =
@@ -60,7 +62,7 @@ trait SpinParser[F[_]] extends RegexParsers with CommonParsers with ReservedWord
       case _ ~ word ~ integer => instructions.Mem(word, integer)
     }
 
-    def equParser: Parser[Instruction[F]] = "equ".r ~ wordRegex ~ wordRegex ^^ {
+    def equParser: Parser[Instruction[F]] = "equ".r ~ wordRegex ~ reservedOrStringOrDouble ^^ {
       case _ ~ name ~ value => instructions.Equ(name, value)
     }
 
@@ -114,7 +116,7 @@ trait SpinParser[F[_]] extends RegexParsers with CommonParsers with ReservedWord
     def choParser = choRda | choSfo | choRdal
 
     def paramDoubleParamDouble: Parser[Instruction[F]] =
-      (rdax | wrax | rdfx | wrhx | wrlx | sof | exp | log) ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
+      (rdax | wrax | rdfx | wrhx | wrlx | sof | exp | log | wra2) ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
         case instruction ~ d1 ~ _ ~ d2 => instruction(d1, d2)
       }
 
@@ -149,6 +151,7 @@ object ParserCombinator {
 
   sealed trait Arithmetic
   case class Division(a: InstructionValue, b: InstructionValue) extends Arithmetic
+  case class Addition(a: InstructionValue, b: InstructionValue) extends Arithmetic
   case class Minus(a: InstructionValue) extends Arithmetic
   case class Multiplication(a: InstructionValue, b: InstructionValue) extends Arithmetic
   case class DelayEnd(a: InstructionValue) extends Arithmetic

@@ -6,6 +6,8 @@ import org.andrewkilpatrick.elmGen.ElmProgram
 import cats.syntax.flatMap._
 import cats.syntax.functor._
 
+import scala.util.Try
+
 class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends ElmProgram("Parser") {
 
   def getInt(addr: InstructionValue): F[Int] =
@@ -23,7 +25,20 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
   def findInConsts(s: String): F[Double] = {
     Sync[F].pure(consts.get(s)).flatMap {
       case Some(StringValue(value)) =>
-        Sync[F].catchNonFatal(ReservedWord.withName(value.toUpperCase).value.toDouble)
+        Try(ReservedWord.withName(value.toUpperCase).value.toDouble).toOption match {
+          case Some(v) => Sync[F].pure(v)
+          case None =>
+            Sync[F].pure(consts.get(value)).flatMap {
+              case Some(StringValue(a)) =>
+                Try(ReservedWord.withName(a.toUpperCase).value.toDouble).toOption match {
+                  case Some(v) => Sync[F].pure(v)
+                  case None    => findInConsts(s)
+                }
+              case Some(DoubleValue(a))    => Sync[F].pure(a)
+              case Some(WithArithmetic(a)) => calculateArithmetic(a)
+              case _                       => Sync[F].raiseError(new Exception(s"Could not find: $s"))
+            }
+        }
       case Some(DoubleValue(value))    => Sync[F].pure(value)
       case Some(WithArithmetic(value)) => calculateArithmetic(value)
       case _                           => Sync[F].raiseError(new Exception(s"Could not find: $s"))
@@ -36,7 +51,12 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
         for {
           a <- getDouble(a)
           b <- getDouble(b)
-        } yield a / b
+        } yield (a / b) / 100
+      case Addition(a, b) =>
+        for {
+          a <- getDouble(a)
+          b <- getDouble(b)
+        } yield a + b
       case Minus(a) => getDouble(a).map(-_)
       case Multiplication(a, b) =>
         for {
@@ -91,6 +111,16 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
     override def toString: String = s"writeDelay($memName, $offset, $scale)"
   }
 
+  case class Wra2(addr: InstructionValue, scale: InstructionValue) extends Instruction[F] {
+    def run() = {
+      for {
+        addr <- getInt(addr)
+        scale <- getDouble(scale)
+        run <- Sync[F].delay(writeDelay(addr, scale))
+      } yield run
+    }
+  }
+
   case class Sof(scale: InstructionValue, offset: InstructionValue) extends Instruction[F] {
     def run() =
       for {
@@ -102,7 +132,7 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
     override def toString: String = s"scaleOffset($scale, $offset)"
   }
 
-  case class Equ(name: String, value: String) extends Instruction[F] {
+  case class Equ(name: String, value: InstructionValue) extends Instruction[F] {
     def run() = Sync[F].unit // Do nothing
     override def toString = ""
   }
@@ -187,7 +217,7 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
         run <- Sync[F].delay(chorusScaleOffset(lfo, flags, offset))
       } yield run
 
-    override def toString: String = s"chorusReadDelay($lfo, $flags, $offset)"
+    override def toString: String = s"chorusScaleOffset($lfo, $flags, $offset)"
   }
 
   case class ChoRdal(lfo: InstructionValue) extends Instruction[F] {
@@ -201,8 +231,8 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
     def run() =
       for {
         lfo <- getInt(lfo)
-        freq <- getDouble(freq)
-        amp <- getDouble(amp)
+        freq <- getInt(freq)
+        amp <- getInt(amp)
         run <- Sync[F].delay(loadSinLFO(lfo, freq, amp))
       } yield run
 
