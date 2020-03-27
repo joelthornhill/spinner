@@ -4,7 +4,9 @@ import cats.effect.Sync
 import example.Instruction.Instruction
 import org.andrewkilpatrick.elmGen.simulator.SpinSimulator
 import cats.implicits._
+import example.ParserCombinator.DoubleValue
 import example.ParserCombinator.InstructionValue
+import org.andrewkilpatrick.elmGen.ElmProgram
 
 import scala.io.Source
 
@@ -25,8 +27,26 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
     instructions.map(i => Sync[F].delay(println(i))).sequence
 
   def runInstructions(
-    instructions: List[Instruction[F]]
-  ): F[List[Unit]] = instructions.map(i => i.run()).sequence
+    instructions: List[Instruction[F]],
+    elmProgram: Instructions[F]
+  ): F[List[Unit]] = {
+    instructions.mapWithIndex {
+      case (i, j) =>
+        i match {
+          case skip: elmProgram.Skp2 =>
+
+              val index: Int = instructions.indexWhere { l =>
+                l match {
+                  case label: elmProgram.SkipLabel if label.label == skip.point =>
+                    true
+                  case _ => false
+                }
+              }
+              skip.replace(DoubleValue((index - j).toDouble)).run()
+          case _ => i.run()
+        }
+    }.sequence
+  }
 
   def getLines(s: String): List[String] =
     s.split("\n")
@@ -76,7 +96,7 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
       _ <- printVals(consts)
       parsed <- spinParse(file, elm)
       _ <- printInstructions(parsed)
-      _ <- runInstructions(parsed)
+      _ <- runInstructions(parsed, elm)
       _ = elm.setSamplerate(44100)
       sim <- Sync[F].delay(new SpinSimulator(elm, testWav, null, 0.5, 0.5, 0.5))
       _ = sim.showInteractiveControls()

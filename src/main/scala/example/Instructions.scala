@@ -5,8 +5,7 @@ import example.ParserCombinator._
 import org.andrewkilpatrick.elmGen.ElmProgram
 import cats.syntax.flatMap._
 import cats.syntax.functor._
-
-import scala.util.Try
+import cats.syntax.applicativeError._
 
 class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends ElmProgram("Parser") {
 
@@ -15,29 +14,31 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
 
   def getDouble(addr: InstructionValue): F[Double] = {
     addr match {
-      case Reserved(reservedWord) => Sync[F].pure(reservedWord.value.toDouble)
       case DoubleValue(value)     => Sync[F].pure(value)
-      case StringValue(value)     => findInConsts(value)
+      case StringValue(value)     => findInReserved(value).handleErrorWith(_ => findInConsts(value))
       case WithArithmetic(value)  => calculateArithmetic(value)
     }
   }
 
+  def findInReserved(s: String): F[Double] =
+    Sync[F].catchNonFatal(ReservedWord.withName(s.toUpperCase).value.toDouble)
+
   def findInConsts(s: String): F[Double] = {
     Sync[F].pure(consts.get(s)).flatMap {
       case Some(StringValue(value)) =>
-        Try(ReservedWord.withName(value.toUpperCase).value.toDouble).toOption match {
-          case Some(v) => Sync[F].pure(v)
-          case None =>
-            Sync[F].pure(consts.get(value)).flatMap {
-              case Some(StringValue(a)) =>
-                Try(ReservedWord.withName(a.toUpperCase).value.toDouble).toOption match {
-                  case Some(v) => Sync[F].pure(v)
-                  case None    => findInConsts(s)
-                }
-              case Some(DoubleValue(a))    => Sync[F].pure(a)
-              case Some(WithArithmetic(a)) => calculateArithmetic(a)
-              case _                       => Sync[F].raiseError(new Exception(s"Could not find: $s"))
-            }
+        findInReserved(value).attempt.flatMap {
+          case Right(v) => Sync[F].pure(v)
+          case Left(_) => Sync[F].raiseError(new Exception(s"Could not find: $s"))
+//            Sync[F].pure(consts.get(value)).flatMap {
+//              case Some(StringValue(a)) =>
+//                Try(ReservedWord.withName(a.toUpperCase).value.toDouble).toOption match {
+//                  case Some(v) => Sync[F].pure(v)
+//                  case None    => findInConsts(s)
+//                }
+//              case Some(DoubleValue(a))    => Sync[F].pure(a)
+//              case Some(WithArithmetic(a)) => calculateArithmetic(a)
+//              case _                       => Sync[F].raiseError(new Exception(s"Could not find: $s"))
+//            }
         }
       case Some(DoubleValue(value))    => Sync[F].pure(value)
       case Some(WithArithmetic(value)) => calculateArithmetic(value)
@@ -65,7 +66,14 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
         } yield a * b
       case DelayEnd(a)            => getDouble(a) // Fix
       case MidpointDelay(a)       => getDouble(a) // Fix
-      case ParserCombinator.Or(a) => getDouble(a.head) // Fix
+      case ParserCombinator.Or(l) =>
+        l.foldLeft(Sync[F].pure(0.0)) { case (acc, b) =>
+          for {
+            left <- acc
+            right <- getDouble(b)
+            asDouble <- getDouble(DoubleValue((left.toInt | right.toInt).toDouble))
+          } yield asDouble
+        }
     }
   }
 
@@ -156,6 +164,17 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
       } yield run
 
     override def toString: String = s"skip($flags, $nSkip)"
+  }
+
+  case class Skp2(flags: InstructionValue, point: String) extends Instruction[F] {
+    def run() = Sync[F].unit // Do nothing
+    def replace(nSkip: InstructionValue) = Skp(flags, nSkip)
+
+    override def toString: String = s"skip($flags, $point)"
+  }
+
+  case class SkipLabel(label: String) extends Instruction[F] {
+    def run() = Sync[F].unit
   }
 
   case object Clr extends Instruction[F] {

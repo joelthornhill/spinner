@@ -5,7 +5,7 @@ import example.ParserCombinator._
 import scala.util.parsing.combinator.RegexParsers
 
 trait Parser extends RegexParsers {
-  private val wordRegex = """[a-zA-Z0-9#_]+""".r
+  private val wordRegex = """[a-zA-Z0-9_]+""".r
   private val doubleRegex = """[0-9]{1,10}([.][0-9]{1,10})?""".r
 
   private def singleWord: Parser[InstructionValue] = opt("\\-".r) ~ wordRegex ^^ {
@@ -62,11 +62,21 @@ trait Parser extends RegexParsers {
       case word ~ _ ~ _ ~ _                   => word
     }
 
+  def wordWithHash: Parser[InstructionValue] =
+    wordRegex ~ "\\#".r ^^ {
+      case word ~ _  => WithArithmetic(DelayEnd(StringValue(word + "#")))
+    }
+
+  def orWord: Parser[InstructionValue] =
+    """([a-zA-Z0-9_]+\|)+[a-zA-Z0-9_]+""".r ^^ { word =>
+      WithArithmetic(Or(word.split("\\|").toList.map(StringValue)))
+    }
+
   def word: Parser[InstructionValue] =
-    wordWithDivision | wordWithAddition | wordWithMultiplication | singleWord
+    orWord | wordWithDivision | wordWithAddition | wordWithMultiplication | wordWithHash | singleWord
 
   def double: Parser[InstructionValue] =
-    doubleWithDivision | doubleWithAddition | doubleWithMultiplication | singleDouble
+     doubleWithDivision | doubleWithAddition | doubleWithMultiplication | singleDouble
 //  case class DelayEnd(a: InstructionValue) extends Arithmetic
 //  case class MidpointDelay(a: InstructionValue) extends Arithmetic
 //  case class Or(a: List[InstructionValue]) extends Arithmetic
