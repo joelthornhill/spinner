@@ -23,9 +23,17 @@ trait SpinParser[F[_]] extends RegexParsers with CommonParsers {
     def eof: Parser[Instruction[F]] = """^\s*$""".r ^^ (_ => instructions.EOF)
 
     // Instructions
-    // TODO: maxx, absa, log, and, or, xor, jam, nop, not
+    // TODO: maxx, absa, xor, jam, nop, not
     def rdax: Parser[(InstructionValue, InstructionValue) => instructions.Rdax] =
       "rdax".r ^^ (_ => instructions.Rdax)
+
+    def rda: Parser[(InstructionValue, InstructionValue) => instructions.Rda] = "rda".r ^^ (_ => instructions.Rda)
+
+    def wra: Parser[(InstructionValue, InstructionValue) => instructions.Wra] = "wra".r ^^ (_ => instructions.Wra)
+
+    def wrap = "wrap".r ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
+      case _ ~ addr ~ _ ~ scale => instructions.Wrap(addr, scale)
+    }
 
     def wrax: Parser[(InstructionValue, InstructionValue) => instructions.Wrax] =
       "wrax".r ^^ (_ => instructions.Wrax)
@@ -108,7 +116,7 @@ trait SpinParser[F[_]] extends RegexParsers with CommonParsers {
     def choParser = choRda | choSfo | choRdal
 
     def paramDoubleParamDouble: Parser[Instruction[F]] =
-      (rdax | wrax | rdfx | wrhx | wrlx | sof | exp | log) ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
+      (rdax | wrax | rdfx | wrhx | wrlx | sof | exp | log | rda | wra ) ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
         case instruction ~ d1 ~ _ ~ d2 => instruction(d1, d2)
       }
 
@@ -122,26 +130,53 @@ trait SpinParser[F[_]] extends RegexParsers with CommonParsers {
 
     def loopLabel: Parser[Instruction[F]] = ("endclr".r | "endset".r) ^^ instructions.SkipLabel
 
-    paramDoubleParamDouble | memParser | paramDoubleDoubleDouble | equParser | skpParser | clr | mulxParser | andParser | orParser | choParser | rmpa | loopParser | loopLabel | eof
+    paramDoubleParamDouble | memParser | wrap | paramDoubleDoubleDouble | equParser | skpParser | clr | mulxParser | andParser | orParser | choParser | rmpa | loopParser | loopLabel | eof
 
   }
 }
 
 object ParserCombinator {
 
-  sealed trait InstructionValue
+  sealed trait InstructionValue {
+    def spinString: String
+  }
 
-  case class DoubleValue(value: Double) extends InstructionValue
+  case class DoubleValue(value: Double) extends InstructionValue {
+    override def spinString: String = {
+      val asInt = value.toInt
+      if (value == asInt) asInt.toString
+      else value.toString
+    }
+  }
+  case class StringValue(value: String) extends InstructionValue {
+    override def spinString: String = value
+  }
+  case class WithArithmetic(value: Arithmetic) extends InstructionValue {
+    override def spinString: String = value.spinString
+  }
 
-  case class StringValue(value: String) extends InstructionValue
-  case class WithArithmetic(value: Arithmetic) extends InstructionValue
-
-  sealed trait Arithmetic
-  case class Division(a: InstructionValue, b: InstructionValue) extends Arithmetic
-  case class Addition(a: InstructionValue, b: InstructionValue) extends Arithmetic
-  case class Minus(a: InstructionValue) extends Arithmetic
-  case class Multiplication(a: InstructionValue, b: InstructionValue) extends Arithmetic
-  case class DelayEnd(a: InstructionValue) extends Arithmetic
-  case class MidpointDelay(a: InstructionValue) extends Arithmetic
-  case class Or(a: List[InstructionValue]) extends Arithmetic
+  sealed trait Arithmetic {
+    def spinString: String
+  }
+  case class Division(a: InstructionValue, b: InstructionValue) extends Arithmetic {
+    override def spinString: String = s"${a.spinString}/${b.spinString}"
+  }
+  case class Addition(a: InstructionValue, b: InstructionValue) extends Arithmetic {
+    override def spinString: String = s"${a.spinString}+${b.spinString}"
+  }
+  case class Minus(a: InstructionValue) extends Arithmetic {
+    override def spinString: String = s"-${a.spinString}"
+  }
+  case class Multiplication(a: InstructionValue, b: InstructionValue) extends Arithmetic {
+    override def spinString: String = s"${a.spinString}*${b.spinString}"
+  }
+  case class DelayEnd(a: InstructionValue) extends Arithmetic {
+    override def spinString: String = s"${a.spinString}#"
+  }
+  case class MidpointDelay(a: InstructionValue) extends Arithmetic {
+    override def spinString: String = s"${a.spinString}^"
+  }
+  case class Or(a: List[InstructionValue]) extends Arithmetic {
+    override def spinString: String = s"${a.map(_.spinString).mkString("|")}"
+  }
 }

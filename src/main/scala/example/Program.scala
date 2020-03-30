@@ -20,9 +20,27 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
     else line.splitAt(index)._1
   }
 
-  def printVals(m: Map[String, InstructionValue]): F[List[Unit]] =
-    m.toList.map { value => Sync[F].delay(println(s"val ${value._1} = ${value._2}")) }.sequence
+  def printVals(m: Map[String, InstructionValue]): F[Unit] = {
+    Sync[F].delay(println(m))
+//    m.toList.map { value => Sync[F].delay(println(s"val ${value._1} = ${value._2}")) }.sequence
+  }
 
+  def checkDifference(instructions: List[(Instruction[F], Int)], lines: List[(String, Int)]): F[List[Unit]] = {
+    instructions.zip(lines).toList.map {
+      case (instruction, spin) =>
+        val a = instruction._1.spinInstruction().replaceAll(" ", "").trim
+        val b = spin._1.replaceAll("\t", "").replaceAll(" ", "").trim
+
+        if (a != b) {
+          Sync[F].delay(println(s"$a did not equal $b"))
+        } else Sync[F].unit
+    }.sequence
+//    instructions.map { s =>
+//      Sync[F].delay(println(s))
+//    }.sequence
+  }
+
+//
   def printInstructions(instructions: List[Instruction[F]]): F[List[Unit]] =
     instructions.map(i => Sync[F].delay(println(i))).sequence
 
@@ -37,12 +55,12 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
 
               val index: Int = instructions.indexWhere { l =>
                 l match {
-                  case label: elmProgram.SkipLabel if label.label == skip.point =>
-                    true
+                  case label: elmProgram.SkipLabel => label.label == skip.point
                   case _ => false
                 }
               }
-              skip.replace(DoubleValue((index - j).toDouble)).run()
+              if (index > 0 ) skip.replace(DoubleValue((index - j).toDouble)).run()
+              else i.run()
           case _ => i.run()
         }
     }.sequence
@@ -55,10 +73,10 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
       .filterNot(_.startsWith(";"))
       .filterNot(_.isEmpty)
 
-  def constants(s: String): F[Map[String, InstructionValue]] = Sync[F].delay(
-    getLines(s)
+  def constants(lines: List[(String, Int)]): F[Map[String, InstructionValue]] = Sync[F].delay(
+    lines.sortBy(_._2)
       .flatMap(line =>
-        parse(equParser, line) match {
+        parse(equParser, line._1) match {
           case Success(matched: Map[String, InstructionValue], _) => Some(matched)
           case Failure(msg, _)                                    => println(s"FAILURE: $msg"); None
           case Error(msg, _)                                      => println(s"ERROR: $msg"); None
@@ -68,13 +86,12 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
       .toMap
   )
 
-  def spinParse(s: String, elmProgram: Instructions[F]): F[List[Instruction[F]]] = Sync[F].delay(
-    getLines(s)
-      .flatMap(line =>
-        parse(parsed(elmProgram), line) match {
-          case Success(_: elmProgram.Equ, _) | Success(elmProgram.EOF, _) =>
-            None
-          case Success(matched, _) => Some(matched)
+  def spinParse(lines: List[(String, Int)], elmProgram: Instructions[F]): F[List[(Instruction[F], Int)]] = Sync[F].delay(
+    lines.sortBy(_._2).flatMap(line =>
+        parse(parsed(elmProgram), line._1) match {
+//          case Success(_: elmProgram.Equ, _) | Success(elmProgram.EOF, _) =>
+//            None
+          case Success(matched, _) => Some((matched, line._2))
           case Failure(msg, _)     => println(s"FAILURE: $msg, $line"); None
           case Error(msg, _)       => println(s"ERROR: $msg, $line"); None
         }
@@ -87,16 +104,25 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
       .use(source => Sync[F].delay(source.getLines.mkString("\n")))
   }
 
+  def blah(program: ElmProgram) = {
+    (0 until program.getCodeLen-1).toList.mapWithIndex {
+      case (_, j) => Sync[F].delay(println(program.getInstruction(j).getInstructionString))
+    }.sequence
+  }
+
   def run(testWav: String, spinPath: String) = {
 
     for {
       file <- fileContents(spinPath)
-      consts <- constants(file)
+      lines = getLines(file).zipWithIndex
+      consts <- constants(lines)
       elm = new Instructions(consts)
       _ <- printVals(consts)
-      parsed <- spinParse(file, elm)
-      _ <- printInstructions(parsed)
-      _ <- runInstructions(parsed, elm)
+      parsed <- spinParse(lines, elm)
+      _ <- checkDifference(parsed, lines)
+      _ <- printInstructions(parsed.map(_._1))
+      _ <- runInstructions(parsed.map(_._1), elm)
+//      _ <- blah(elm)
       _ = elm.setSamplerate(44100)
       sim <- Sync[F].delay(new SpinSimulator(elm, testWav, null, 0.5, 0.5, 0.5))
       _ = sim.showInteractiveControls()

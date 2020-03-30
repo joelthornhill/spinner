@@ -6,16 +6,19 @@ import scala.util.parsing.combinator.RegexParsers
 
 trait Parser extends RegexParsers {
   private val wordRegex = """[a-zA-Z0-9_]+""".r
-  private val doubleRegex = """[0-9]{1,10}([.][0-9]{1,10})?""".r
+//  private val doubleRegex = """((?:[0-9]{1,10})(?:[.][0-9]{1,10})?)""".r
 
-  private def singleWord: Parser[InstructionValue] = opt("\\-".r) ~ wordRegex ^^ {
+  private val doubleR = """(\d+(\.\d*))""".r ^^ (_.toDouble)
+  private val intRegex = """\d+""".r ^^ (_.toDouble)
+
+  private def singleWord: Parser[InstructionValue] = opt("-".r) ~ wordRegex ^^ {
     case Some(_) ~ word => WithArithmetic(Minus(StringValue(word)))
     case None ~ word    => StringValue(word)
   }
 
-  private def singleDouble: Parser[InstructionValue] = opt("\\-".r) ~ doubleRegex ^^ {
-    case Some(_) ~ double => WithArithmetic(Minus(DoubleValue(double.toDouble)))
-    case None ~ double    => DoubleValue(double.toDouble)
+  private def singleDouble: Parser[InstructionValue] = opt("-".r) ~ (doubleR | intRegex) ^^ {
+    case Some(_) ~ double => WithArithmetic(Minus(DoubleValue(double)))
+    case None ~ double    => DoubleValue(double)
   }
 
   def doubleWithDivision: Parser[InstructionValue] =
@@ -63,13 +66,25 @@ trait Parser extends RegexParsers {
     }
 
   def wordWithHash: Parser[InstructionValue] =
-    wordRegex ~ "\\#".r ^^ {
-      case word ~ _  => WithArithmetic(DelayEnd(StringValue(word + "#")))
+    wordRegex ~ "#".r ^^ {
+      case word ~ _  => WithArithmetic(DelayEnd(StringValue(word)))
     }
 
+  def wordWithCarat: Parser[InstructionValue] =
+    wordRegex ~ "\\^".r ^^ {
+      case word ~ _ => WithArithmetic(MidpointDelay(StringValue(word)))
+    }
+
+//  def wordWithCarat: Parser[InstructionValue] =
+//    wordRegex ~ "\\^".r  ~ opt("\\+".r) ~ opt(singleDouble)  ^^ {
+//      case word ~ _ ~ Some(_) ~ Some(add) => WithArithmetic(MidpointDelay(WithArithmetic(Addition(StringValue(word), add))))
+//      case word ~ _ ~ _ ~ _ => WithArithmetic(MidpointDelay(StringValue(word)))
+//    }
+
+
   def orWord: Parser[InstructionValue] =
-    """([a-zA-Z0-9_]+\|)+[a-zA-Z0-9_]+""".r ^^ { word =>
-      WithArithmetic(Or(word.split("\\|").toList.map(StringValue)))
+    """([a-zA-Z0-9_]+\s?\|\s?)+[a-zA-Z0-9_]+""".r ^^ { word =>
+      WithArithmetic(Or(word.split("\\|").toList.map(a => StringValue(a.trim))))
     }
 
   def word: Parser[InstructionValue] =
