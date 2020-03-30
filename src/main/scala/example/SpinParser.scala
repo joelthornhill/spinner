@@ -60,9 +60,14 @@ trait SpinParser[F[_]] extends RegexParsers with CommonParsers {
     }
 
     def skpParser: Parser[Instruction[F]] =
-      "skp".r ~ reservedOrStringOrDouble ~ comma ~ wordRegex ^^ {
-        case _ ~ flags ~ _ ~ nSkip => instructions.Skp2(flags, nSkip)
+      "skp".r ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
+        case _ ~ flags ~ _ ~ nSkip => instructions.Skp(flags, nSkip)
       }
+
+//    def skpParser2: Parser[Instruction[F]] =
+//      "skp".r ~ reservedOrStringOrDouble ~ comma ~ wordRegex ^^ {
+//        case _ ~ flags ~ _ ~ nSkip => instructions.Skp2(flags, nSkip)
+//      }
 
     def mulxParser: Parser[Instruction[F]] = "mulx".r ~ reservedOrStringOrDouble ^^ {
       case _ ~ addr => instructions.Mulx(addr)
@@ -126,11 +131,11 @@ trait SpinParser[F[_]] extends RegexParsers with CommonParsers {
           instruction(lfo, freq, amp)
       }
 
-    def loopParser: Parser[Instruction[F]] = "loop".r ^^ (_ => instructions.Loop)
+//    def loopParser: Parser[Instruction[F]] = "loop".r ^^ (_ => instructions.Loop)
 
-    def loopLabel: Parser[Instruction[F]] = ("endclr".r | "endset".r) ^^ instructions.SkipLabel
+    def loopLabel: Parser[Instruction[F]] = ("endclr".r | "endset".r | "loop")  ^^ instructions.SkipLabel
 
-    paramDoubleParamDouble | memParser | wrap | paramDoubleDoubleDouble | equParser | skpParser | clr | mulxParser | andParser | orParser | choParser | rmpa | loopParser | loopLabel | eof
+    paramDoubleParamDouble | memParser | wrap | paramDoubleDoubleDouble | equParser | skpParser | clr | mulxParser | andParser | orParser | choParser | rmpa | loopLabel | eof
 
   }
 }

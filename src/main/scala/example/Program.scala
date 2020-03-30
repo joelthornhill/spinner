@@ -4,8 +4,7 @@ import cats.effect.Sync
 import example.Instruction.Instruction
 import org.andrewkilpatrick.elmGen.simulator.SpinSimulator
 import cats.implicits._
-import example.ParserCombinator.DoubleValue
-import example.ParserCombinator.InstructionValue
+import example.ParserCombinator.{DoubleValue, InstructionValue, StringValue}
 import org.andrewkilpatrick.elmGen.ElmProgram
 
 import scala.io.Source
@@ -26,7 +25,7 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
   }
 
   def checkDifference(instructions: List[(Instruction[F], Int)], lines: List[(String, Int)]): F[List[Unit]] = {
-    instructions.zip(lines).toList.map {
+    instructions.zip(lines).map {
       case (instruction, spin) =>
         val a = instruction._1.spinInstruction().replaceAll(" ", "").trim
         val b = spin._1.replaceAll("\t", "").replaceAll(" ", "").trim
@@ -35,14 +34,54 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
           Sync[F].delay(println(s"$a did not equal $b"))
         } else Sync[F].unit
     }.sequence
-//    instructions.map { s =>
-//      Sync[F].delay(println(s))
-//    }.sequence
+
   }
 
-//
-  def printInstructions(instructions: List[Instruction[F]]): F[List[Unit]] =
-    instructions.map(i => Sync[F].delay(println(i))).sequence
+  def printInstructions(instructions: List[Instruction[F]], elmProgram: Instructions[F]): F[List[Unit]] =
+    instructions.mapWithIndex {
+      case (i, j) =>
+        i match {
+          case elmProgram.Skp(flags, value) =>
+            value match {
+              case StringValue(stringValue) =>
+
+                val index: Int = instructions.indexWhere { l =>
+                  l match {
+                    case label: elmProgram.SkipLabel => label.label == stringValue
+                    case _ => false
+                  }
+                }
+                if (index > 0 ) Sync[F].delay(println(elmProgram.Skp(flags, DoubleValue((index - j - 1).toDouble))))
+                else Sync[F].delay(println(i))
+
+              case _ => Sync[F].delay(println(i))
+            }
+          case _ => Sync[F].delay(println(i))
+        }
+    }.sequence
+
+  def printRun(instructions: List[Instruction[F]], elmProgram: Instructions[F]): F[List[Unit]] =
+    instructions.mapWithIndex {
+      case (i, j) =>
+        i match {
+          case elmProgram.Skp(flags, value) =>
+            value match {
+              case StringValue(stringValue) =>
+
+                val index: Int = instructions.indexWhere { l =>
+                  l match {
+                    case label: elmProgram.SkipLabel => label.label == stringValue
+                    case _ => false
+                  }
+                }
+                if (index > 0 ) elmProgram.Skp(flags, DoubleValue((index - j - 1).toDouble)).runString()
+                else i.runString()
+
+              case _ => i.runString()
+            }
+          case _ => i.runString()
+        }
+    }.sequence
 
   def runInstructions(
     instructions: List[Instruction[F]],
@@ -51,16 +90,21 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
     instructions.mapWithIndex {
       case (i, j) =>
         i match {
-          case skip: elmProgram.Skp2 =>
+          case elmProgram.Skp(flags, value) =>
+            value match {
+              case StringValue(stringValue) =>
 
-              val index: Int = instructions.indexWhere { l =>
-                l match {
-                  case label: elmProgram.SkipLabel => label.label == skip.point
-                  case _ => false
+                val index: Int = instructions.indexWhere { l =>
+                  l match {
+                    case label: elmProgram.SkipLabel => label.label == stringValue
+                    case _ => false
+                  }
                 }
-              }
-              if (index > 0 ) skip.replace(DoubleValue((index - j).toDouble)).run()
-              else i.run()
+                if (index > 0 ) elmProgram.Skp(flags, DoubleValue((index - j).toDouble)).run()
+                else i.run()
+
+              case _ => i.run()
+            }
           case _ => i.run()
         }
     }.sequence
@@ -116,15 +160,16 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
       file <- fileContents(spinPath)
       lines = getLines(file).zipWithIndex
       consts <- constants(lines)
-      elm = new Instructions(consts)
-      _ <- printVals(consts)
+      elm = new Instructions[F]()
+//      _ <- printVals(consts)
       parsed <- spinParse(lines, elm)
+//      _ <- printRun(parsed.map(_._1), elm)
+//      _ <- printInstructions(parsed.map(_._1), elm)
+//      _ <- runInstructions(parsed.map(_._1), elm)
       _ <- checkDifference(parsed, lines)
-      _ <- printInstructions(parsed.map(_._1))
-      _ <- runInstructions(parsed.map(_._1), elm)
 //      _ <- blah(elm)
       _ = elm.setSamplerate(44100)
-      sim <- Sync[F].delay(new SpinSimulator(elm, testWav, null, 0.5, 0.5, 0.5))
+      sim <- Sync[F].delay(new SpinSimulator(elm, testWav, null, 1, 1,1))
       _ = sim.showInteractiveControls()
       _ = sim.showLevelLogger()
       _ = sim.setLoopMode(true)

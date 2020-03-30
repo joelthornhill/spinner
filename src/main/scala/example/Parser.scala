@@ -92,9 +92,4 @@ trait Parser extends RegexParsers {
 
   def double: Parser[InstructionValue] =
      doubleWithDivision | doubleWithAddition | doubleWithMultiplication | singleDouble
-//  case class DelayEnd(a: InstructionValue) extends Arithmetic
-//  case class MidpointDelay(a: InstructionValue) extends Arithmetic
-//  case class Or(a: List[InstructionValue]) extends Arithmetic
-  //  case class Addition(a: InstructionValue, b: InstructionValue) extends Arithmetic
-
 }

@@ -30,40 +30,20 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
           case Right(const) => Sync[F].pure(const)
           case Left(_) =>
             Sync[F].pure(consts.get(value)).flatMap {
-              case Some(StringValue(a)) =>
-                findInReserved(a).attempt flatMap {
+              case Some(StringValue(stringValue)) =>
+                findInReserved(stringValue).attempt flatMap {
                   case Right(v) => Sync[F].pure(v)
-                  case _ => Sync[F].raiseError(new Exception("aaaah"))
+                  case _ => Sync[F].raiseError(new Exception(s"Could not find: $stringValue in consts"))
                 }
-              case Some(DoubleValue(a)) => Sync[F].pure(a)
-              case Some(WithArithmetic(a)) => calculateArithmetic(a)
-              case _ => Sync[F].raiseError(new Exception("Nono"))
+              case Some(DoubleValue(doubleValue)) => Sync[F].pure(doubleValue)
+              case Some(WithArithmetic(withArithmetic)) => calculateArithmetic(withArithmetic)
+              case _ => Sync[F].raiseError(new Exception(s"Could not find $value in consts"))
             }
         }
       case Some(DoubleValue(value)) => Sync[F].pure(value)
       case Some(WithArithmetic(value)) => calculateArithmetic(value)
       case None => Sync[F].raiseError(new Exception(s"Could not find: $s in consts"))
     }
-//    Sync[F].pure(consts.get(s)).flatMap {
-//      case Some(StringValue(value)) =>
-//        findInReserved(value).attempt.flatMap {
-//          case Right(v) => Sync[F].pure(v)
-//          case Left(_) => Sync[F].raiseError(new Exception(s"Could not find: $s"))
-//            Sync[F].pure(consts.get(value)).flatMap {
-//              case Some(StringValue(a)) =>
-//                Try(ReservedWord.withName(a.toUpperCase).value.toDouble).toOption match {
-//                  case Some(v) => Sync[F].pure(v)
-//                  case None    => findInConsts(s)
-//                }
-//              case Some(DoubleValue(a))    => Sync[F].pure(a)
-//              case Some(WithArithmetic(a)) => calculateArithmetic(a)
-//              case _                       => Sync[F].raiseError(new Exception(s"Could not find: $s"))
-//            }
-//        }
-//      case Some(DoubleValue(value))    => Sync[F].pure(value)
-//      case Some(WithArithmetic(value)) => calculateArithmetic(value)
-//      case _                           => Sync[F].raiseError(new Exception(s"Could not find: $s"))
-//    }
   }
 
   def calculateArithmetic(arithmetic: Arithmetic): F[Double] = {
@@ -105,6 +85,13 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
         run <- Sync[F].delay(readRegister(addr, scale))
       } yield run
 
+    def runString(): F[Unit] =
+      for {
+        addr <- getInt(addr)
+        scale <- getDouble(scale)
+        run <- Sync[F].delay(println(s"readRegister($addr, $scale)"))
+      } yield run
+
     override def toString = s"readRegister(${addr.toString}, $scale)"
 
     override def spinInstruction(): String = s"rdax ${addr.spinString},${scale.spinString}"
@@ -125,6 +112,20 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
         }
       } yield run
 
+    def runString() =
+      for {
+        scale <- getDouble(scale)
+        run <- addr match {
+          case WithArithmetic(DelayEnd(StringValue(value))) =>
+            Sync[F].delay(println(s"""readDelay(\"$value\", 1.0, $scale)"""))
+          case WithArithmetic(MidpointDelay(StringValue(value))) =>
+            Sync[F].delay(println(s"""readDelay(\"$value\", 0.5, $scale)"""))
+          case StringValue(value) =>
+            Sync[F].delay(println(s"""readDelay(\"$value\", 0.0, $scale)"""))
+          case _ => getInt(addr).flatMap(addr => Sync[F].delay(println(s"readDelay($addr, $scale)")))
+        }
+      } yield run
+
     override def toString: String = s"readDelay($addr, $scale)"
 
     override def spinInstruction(): String = s"rda ${addr.spinString}, ${scale.spinString}"
@@ -136,6 +137,13 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
         addr <- getInt(addr)
         scale <- getDouble(scale)
         run <- Sync[F].delay(writeRegister(addr, scale))
+      } yield run
+
+    def runString() =
+      for {
+        addr <- getInt(addr)
+        scale <- getDouble(scale)
+        run <- Sync[F].delay(println(s"writeRegister($addr, $scale)"))
       } yield run
 
     override def toString = s"writeRegister($addr, $scale)"
@@ -155,6 +163,20 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
           case StringValue(value) =>
             Sync[F].delay(writeAllpass(value, 0.0, scale))
           case _ => getInt(addr).flatMap(addr => Sync[F].delay(writeAllpass(addr, scale)))
+        }
+      } yield run
+
+    def runString() =
+      for {
+        scale <- getDouble(scale)
+        run <- addr match {
+          case WithArithmetic(DelayEnd(StringValue(value))) =>
+            Sync[F].delay(println(s"""writeAllpass(\"$value\", 1.0, $scale)"""))
+          case WithArithmetic(MidpointDelay(StringValue(value))) =>
+            Sync[F].delay(println(s"""writeAllpass(\"$value\", 0.5, $scale"""))
+          case StringValue(value) =>
+            Sync[F].delay(println(s"""writeAllpass(\"$value\", 0.0, $scale)"""))
+          case _ => getInt(addr).flatMap(addr => Sync[F].delay(println(s"writeAllpass($addr, $scale)")))
         }
       } yield run
 
@@ -178,6 +200,20 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
         }
       } yield run
 
+    def runString() =
+      for {
+        scale <- getDouble(scale)
+        run <- addr match {
+          case WithArithmetic(DelayEnd(StringValue(value))) =>
+            Sync[F].delay(println(s"""writeDelay(\"$value\", 1.0, $scale)"""))
+          case WithArithmetic(MidpointDelay(StringValue(value))) =>
+            Sync[F].delay(println(s"""writeDelay(\"$value\", 0.5, $scale)"""))
+          case StringValue(value) =>
+            Sync[F].delay(println(s"""writeDelay(\"$value\", 0.0, $scale)"""))
+          case _ => getInt(addr).flatMap(addr => Sync[F].delay(println(s"writeDelay($addr, $scale)")))
+        }
+      } yield run
+
     override def toString: String = s"writeDelay($addr, $scale)"
 
     override def spinInstruction(): String = s"wra ${addr.spinString}, ${scale.spinString}"
@@ -191,6 +227,13 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
         run <- Sync[F].delay(scaleOffset(scale, offset))
       } yield run
 
+    def runString() =
+      for {
+        scale <- getDouble(scale)
+        offset <- getDouble(offset)
+        run <- Sync[F].delay(println(s"scaleOffset($scale, $offset)"))
+      } yield run
+
     override def toString: String = s"scaleOffset($scale, $offset)"
 
     override def spinInstruction(): String = s"sof ${scale.spinString},${offset.spinString}"
@@ -198,6 +241,7 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
 
   case class Equ(name: String, value: InstructionValue) extends Instruction[F] {
     def run() = Sync[F].unit // Do nothing
+    def runString() = Sync[F].delay(println(s"val $name = ${value.spinString.toUpperCase}")) // Do nothing
     override def toString = ""
 
     override def spinInstruction(): String = s"equ $name ${value.spinString}"
@@ -205,6 +249,7 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
 
   case class Mem(name: String, value: InstructionValue) extends Instruction[F] {
     def run() = getInt(value).flatMap(size => Sync[F].delay(allocDelayMem(name, size)))
+    def runString() = getInt(value).flatMap(size => Sync[F].delay(println(s"""allocDelayMem("$name", $size)""")))
 
     override def toString = s"allocDelayMem($name, $value)"
 
@@ -213,6 +258,7 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
 
   case object EOF extends Instruction[F] {
     def run() = Sync[F].unit
+    def runString() = Sync[F].unit
 
     override def spinInstruction(): String = ""
   }
@@ -221,8 +267,17 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
     def run() =
       for {
         flags <- getInt(flags)
+        run <- nSkip match {
+          case StringValue(_) => Sync[F].unit
+          case _ => getInt(nSkip).flatMap(nSkip => Sync[F].delay(skip(flags, nSkip)))
+        }
+      } yield run
+
+    def runString() =
+      for {
+        flags <- getInt(flags)
         nSkip <- getInt(nSkip)
-        run <- Sync[F].delay(skip(flags, nSkip))
+        run <- Sync[F].delay(println(s"skip($flags, $nSkip)"))
       } yield run
 
     override def toString: String = s"skip($flags, $nSkip)"
@@ -230,23 +285,26 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
     override def spinInstruction(): String = s"skip ${flags.spinString},${nSkip.spinString}"
   }
 
-  case class Skp2(flags: InstructionValue, point: String) extends Instruction[F] {
-    def run() = Sync[F].unit // Do nothing
-    def replace(nSkip: InstructionValue) = Skp(flags, nSkip)
-
-    override def toString: String = s"skip($flags, $point)"
-
-    override def spinInstruction(): String = s"skip ${flags.spinString},$point"
-  }
+//  case class Skp2(flags: InstructionValue, point: String) extends Instruction[F] {
+//    def run() = Sync[F].unit // Do nothing
+//    def runString() = Sync[F].delay(println("Skp2 does nothing"))
+//    def replace(nSkip: InstructionValue) = Skp(flags, nSkip)
+//
+//    override def toString: String = s"skip($flags, $point)"
+//
+//    override def spinInstruction(): String = s"skp ${flags.spinString},$point"
+//  }
 
   case class SkipLabel(label: String) extends Instruction[F] {
     def run() = Sync[F].unit
+    def runString() = Sync[F].delay(println("Skip Label does nothing"))
 
-    override def spinInstruction(): String = ""
+    override def spinInstruction(): String = s"Skip label: $label"
   }
 
   case object Clr extends Instruction[F] {
     def run() = Sync[F].delay(clear())
+    def runString() = Sync[F].delay(println("clear()"))
 
     override def toString: String = "clear()"
 
@@ -261,6 +319,13 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
         run <- Sync[F].delay(exp(scale, offset))
       } yield run
 
+    def runString() =
+      for {
+        scale <- getDouble(scale)
+        offset <- getDouble(offset)
+        run <- Sync[F].delay(println(s"exp($scale, $offset)"))
+      } yield run
+
     override def toString: String = s"exp($scale, $offset)"
 
     override def spinInstruction(): String = s"exp ${scale.spinString},${offset.spinString}"
@@ -268,6 +333,7 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
 
   case class Mulx(addr: InstructionValue) extends Instruction[F] {
     def run() = getInt(addr).flatMap(a => Sync[F].delay(mulx(a)))
+    def runString() = getInt(addr).flatMap(a => Sync[F].delay(println(s"mulx($a)")))
 
     override def toString: String = s"mulx($addr)"
 
@@ -282,6 +348,14 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
         freq <- getInt(freq)
         amp <- getInt(amp)
         run <- Sync[F].delay(loadRampLFO(lfo, freq, amp))
+      } yield run
+
+    def runString() =
+      for {
+        lfo <- getInt(lfo)
+        freq <- getInt(freq)
+        amp <- getInt(amp)
+        run <- Sync[F].delay(println(s"loadRampLFO($lfo, $freq, $amp)"))
       } yield run
 
     override def toString: String = s"loadRampLFO($lfo, $freq, $amp)"
@@ -301,6 +375,14 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
         run <- Sync[F].delay(chorusReadDelay(lfo, flags, addr))
       } yield run
 
+    def runString() =
+      for {
+        lfo <- getInt(lfo)
+        flags <- getInt(flags)
+        addr <- getInt(addr)
+        run <- Sync[F].delay(println(s"chorusReadDelay($lfo, $flags, $addr)"))
+      } yield run
+
     override def toString: String = s"chorusReadDelay($lfo, $flags, $addr)"
 
     override def spinInstruction(): String = s"cho rda, ${lfo.spinString},${flags.spinString},${addr.spinString}"
@@ -316,6 +398,14 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
         run <- Sync[F].delay(chorusScaleOffset(lfo, flags, offset))
       } yield run
 
+    def runString() =
+      for {
+        lfo <- getInt(lfo)
+        flags <- getInt(flags)
+        offset <- getDouble(offset)
+        run <- Sync[F].delay(println(s"chorusScaleOffset($lfo, $flags, $offset)"))
+      } yield run
+
     override def toString: String = s"chorusScaleOffset($lfo, $flags, $offset)"
 
     override def spinInstruction(): String = s"cho sof,${lfo.spinString},${flags.spinString},${offset.spinString}"
@@ -323,6 +413,7 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
 
   case class ChoRdal(lfo: InstructionValue) extends Instruction[F] {
     def run() = getInt(lfo).flatMap(lfo => Sync[F].delay(chorusReadValue(lfo)))
+    def runString() = getInt(lfo).flatMap(lfo => Sync[F].delay(println(s"chorusReadValue($lfo)")))
 
     override def toString: String = s"chorusReadValue($lfo)"
 
@@ -339,6 +430,14 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
         run <- Sync[F].delay(loadSinLFO(lfo, freq, amp))
       } yield run
 
+    def runString() =
+      for {
+        lfo <- getInt(lfo)
+        freq <- getInt(freq)
+        amp <- getInt(amp)
+        run <- Sync[F].delay(println(s"loadSinLFO($lfo, $freq, $amp)"))
+      } yield run
+
     override def toString: String = s"loadSinLFO($lfo, $freq, $amp)"
 
     override def spinInstruction(): String = s"wlds ${lfo.spinString},${freq.spinString},${amp.spinString}"
@@ -353,6 +452,13 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
         run <- Sync[F].delay(readRegisterFilter(addr, scale))
       } yield run
 
+    def runString() =
+      for {
+        addr <- getInt(addr)
+        scale <- getDouble(scale)
+        run <- Sync[F].delay(println(s"readRegisterFilter($addr, $scale)"))
+      } yield run
+
     override def toString: String = s"readRegisterFilter($addr, $scale)"
 
     override def spinInstruction(): String = s"rdfx ${addr.spinString}, ${scale.spinString}"
@@ -360,6 +466,7 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
 
   case class Rmpa(scale: InstructionValue) extends Instruction[F] {
     def run() = getDouble(scale).flatMap(scale => Sync[F].delay(readDelayPointer(scale)))
+    def runString() = getDouble(scale).flatMap(scale => Sync[F].delay(println(s"readDelayPointer($scale)")))
 
     override def toString: String = s"readDelayPointer($scale)"
 
@@ -368,6 +475,13 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
 
   case class Wrlx(addr: InstructionValue, scale: InstructionValue) extends Instruction[F] {
     def run() =
+      for {
+        addr <- getInt(addr)
+        scale <- getDouble(scale)
+        run <- Sync[F].delay(writeRegisterLowshelf(addr, scale))
+      } yield run
+
+    def runString() =
       for {
         addr <- getInt(addr)
         scale <- getDouble(scale)
@@ -387,6 +501,13 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
         run <- Sync[F].delay(writeRegisterHighshelf(addr, scale))
       } yield run
 
+    def runString() =
+      for {
+        addr <- getInt(addr)
+        scale <- getDouble(scale)
+        run <- Sync[F].delay(println(s"writeRegisterHighshelf($addr, $scale)"))
+      } yield run
+
     override def toString: String = s"writeRegisterHighshelf($addr, $scale)"
 
     override def spinInstruction(): String = s"wrhx ${addr.spinString}, ${scale.spinString}"
@@ -400,6 +521,13 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
         run <- Sync[F].delay(log(scale, offset))
       } yield run
 
+    def runString() =
+      for {
+        scale <- getDouble(scale)
+        offset <- getDouble(offset)
+        run <- Sync[F].delay(println(s"log($scale, $offset)"))
+      } yield run
+
     override def toString: String = s"log($scale, $offset)"
 
     override def spinInstruction(): String = s"log ${scale.spinString},${offset.spinString}"
@@ -407,6 +535,7 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
 
   case class And(mask: InstructionValue) extends Instruction[F] {
     def run() = getInt(mask).flatMap(mask => Sync[F].delay(and(mask)))
+    def runString() = getInt(mask).flatMap(mask => Sync[F].delay(println(s"and($mask)")))
 
     override def toString: String = s"and($mask)"
 
@@ -415,22 +544,25 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
 
   case class Or(mask: InstructionValue) extends Instruction[F] {
     def run() = getInt(mask).flatMap(mask => Sync[F].delay(or(mask)))
+    def runString() = getInt(mask).flatMap(mask => Sync[F].delay(println(s"or($mask)")))
 
     override def toString: String = s"or($mask)"
 
     override def spinInstruction(): String = s"or ${mask.spinString}"
   }
 
-  case object Loop extends Instruction[F] {
-    def run() = Sync[F].unit
-
-    override def spinInstruction(): String = s"loop"
-  }
+//  case object Loop extends Instruction[F] {
+//    def run() = Sync[F].unit
+//    def runString() = Sync[F].delay(println("loop does nothing"))
+//
+//    override def spinInstruction(): String = s"loop"
+//  }
 }
 
 object Instruction {
   sealed trait Instruction[F[_]] {
     def run(): F[Unit]
+    def runString(): F[Unit]
     def spinInstruction(): String
   }
 }
