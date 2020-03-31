@@ -1,6 +1,6 @@
-package example
+package spinner
 
-import example.ParserCombinator.InstructionValue
+import spinner.ParserCombinator.InstructionValue
 
 import scala.util.parsing.combinator._
 

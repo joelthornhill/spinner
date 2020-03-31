@@ -1,6 +1,6 @@
-package example
+package spinner
 
-import example.ParserCombinator._
+import spinner.ParserCombinator._
 
 import scala.util.parsing.combinator.RegexParsers
 

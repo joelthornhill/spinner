@@ -1,4 +1,4 @@
-package example
+package spinner
 import cats.effect.ExitCode
 import cats.effect.IO
 import cats.effect.IOApp

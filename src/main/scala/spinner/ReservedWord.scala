@@ -1,4 +1,4 @@
-package example
+package spinner
 import enumeratum.EnumEntry
 import enumeratum._
 

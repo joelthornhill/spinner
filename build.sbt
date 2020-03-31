@@ -1,11 +1,8 @@
 import Dependencies._
 
 ThisBuild / scalaVersion     := "2.13.1"
-ThisBuild / version          := "0.1.0-SNAPSHOT"
-ThisBuild / organization     := "com.example"
-ThisBuild / organizationName := "example"
 
-unmanagedJars in Compile += file(Path.userHome+"/OVO/ElmGen/export/elmGen-0.5.jar")
+unmanagedJars in Compile += file("src/main/scala/org/andrewkilpatrick/elmGen/elmGen-0.5.jar")
 
 scalafmtConfig in ThisBuild := baseDirectory.value / ".scalafmt.conf"
 

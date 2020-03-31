@@ -1,10 +1,10 @@
-package example
+package spinner
 import cats.effect.Resource
 import cats.effect.Sync
-import example.Instruction.Instruction
+import spinner.Instruction.Instruction
 import org.andrewkilpatrick.elmGen.simulator.SpinSimulator
 import cats.implicits._
-import example.ParserCombinator.{DoubleValue, InstructionValue, StringValue}
+import spinner.ParserCombinator.{DoubleValue, InstructionValue, StringValue}
 import org.andrewkilpatrick.elmGen.SpinProgram
 
 import scala.io.Source
