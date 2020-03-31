@@ -2,12 +2,12 @@ package example
 import cats.effect.Sync
 import example.Instruction.Instruction
 import example.ParserCombinator._
-import org.andrewkilpatrick.elmGen.ElmProgram
 import cats.syntax.flatMap._
 import cats.syntax.functor._
 import cats.syntax.applicativeError._
+import org.andrewkilpatrick.elmGen.SpinProgram
 
-class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends ElmProgram("Parser") {
+class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends SpinProgram("Parser") {
 
   def getInt(addr: InstructionValue): F[Int] =
     getDouble(addr).flatMap(d => Sync[F].catchNonFatal(d.toInt))
@@ -106,6 +106,8 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
             Sync[F].delay(readDelay(value, 1.0, scale))
           case WithArithmetic(MidpointDelay(StringValue(value))) =>
             Sync[F].delay(readDelay(value, 0.5, scale))
+          case WithArithmetic(Addition(StringValue(value), DoubleValue(offset))) =>
+            Sync[F].delay(readDelay(value, offset.toInt, scale))
           case StringValue(value) =>
             Sync[F].delay(readDelay(value, 0.0, scale))
           case _ => getInt(addr).flatMap(addr => Sync[F].delay(readDelay(addr, scale)))
@@ -120,6 +122,8 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
             Sync[F].delay(println(s"""readDelay(\"$value\", 1.0, $scale)"""))
           case WithArithmetic(MidpointDelay(StringValue(value))) =>
             Sync[F].delay(println(s"""readDelay(\"$value\", 0.5, $scale)"""))
+          case WithArithmetic(Addition(StringValue(value), DoubleValue(offset))) =>
+            Sync[F].delay(println(s"""readDelay(\"$value\", ${offset.toInt}, $scale)"""))
           case StringValue(value) =>
             Sync[F].delay(println(s"""readDelay(\"$value\", 0.0, $scale)"""))
           case _ => getInt(addr).flatMap(addr => Sync[F].delay(println(s"readDelay($addr, $scale)")))
@@ -194,6 +198,8 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
             Sync[F].delay(writeDelay(value, 1.0, scale))
           case WithArithmetic(MidpointDelay(StringValue(value))) =>
             Sync[F].delay(writeDelay(value, 0.5, scale))
+          case WithArithmetic(Addition(StringValue(value), DoubleValue(offset))) =>
+            Sync[F].delay(writeDelay(value, offset.toInt, scale))
           case StringValue(value) =>
             Sync[F].delay(writeDelay(value, 0.0, scale))
           case _ => getInt(addr).flatMap(addr => Sync[F].delay(writeDelay(addr, scale)))
@@ -208,6 +214,8 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
             Sync[F].delay(println(s"""writeDelay(\"$value\", 1.0, $scale)"""))
           case WithArithmetic(MidpointDelay(StringValue(value))) =>
             Sync[F].delay(println(s"""writeDelay(\"$value\", 0.5, $scale)"""))
+          case WithArithmetic(Addition(StringValue(value), DoubleValue(offset))) =>
+            Sync[F].delay(println(s"""writeDelay(\"$value\", ${offset.toInt}, $scale)"""))
           case StringValue(value) =>
             Sync[F].delay(println(s"""writeDelay(\"$value\", 0.0, $scale)"""))
           case _ => getInt(addr).flatMap(addr => Sync[F].delay(println(s"writeDelay($addr, $scale)")))
@@ -366,21 +374,25 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends El
   case class ChoRda(lfo: InstructionValue, flags: InstructionValue, addr: InstructionValue)
       extends Instruction[F] {
     def run() =
-
-
       for {
         lfo <- getInt(lfo)
         flags <- getInt(flags)
-        addr <- getInt(addr)
-        run <- Sync[F].delay(chorusReadDelay(lfo, flags, addr))
+        run <- addr match {
+          case WithArithmetic(Addition(StringValue(value), DoubleValue(offset))) =>
+            Sync[F].delay(chorusReadDelay(lfo, flags, value, offset.toInt))
+          case _ => getInt(addr).flatMap(addr => Sync[F].delay(chorusReadDelay(lfo, flags, addr)))
+        }
       } yield run
 
     def runString() =
       for {
         lfo <- getInt(lfo)
         flags <- getInt(flags)
-        addr <- getInt(addr)
-        run <- Sync[F].delay(println(s"chorusReadDelay($lfo, $flags, $addr)"))
+        run <- addr match {
+          case WithArithmetic(Addition(StringValue(value), DoubleValue(offset))) =>
+            Sync[F].delay(println(s"chorusReadDelay($lfo, $flags, $value, ${offset.toInt})"))
+          case _ => getInt(addr).flatMap(addr => Sync[F].delay(println(s"chorusReadDelay($lfo, $flags, $addr)")))
+        }
       } yield run
 
     override def toString: String = s"chorusReadDelay($lfo, $flags, $addr)"

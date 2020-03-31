@@ -5,7 +5,7 @@ import example.Instruction.Instruction
 import org.andrewkilpatrick.elmGen.simulator.SpinSimulator
 import cats.implicits._
 import example.ParserCombinator.{DoubleValue, InstructionValue, StringValue}
-import org.andrewkilpatrick.elmGen.ElmProgram
+import org.andrewkilpatrick.elmGen.SpinProgram
 
 import scala.io.Source
 
@@ -148,28 +148,20 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
       .use(source => Sync[F].delay(source.getLines.mkString("\n")))
   }
 
-  def blah(program: ElmProgram) = {
-    (0 until program.getCodeLen-1).toList.mapWithIndex {
-      case (_, j) => Sync[F].delay(println(program.getInstruction(j).getInstructionString))
-    }.sequence
-  }
-
   def run(testWav: String, spinPath: String) = {
 
     for {
       file <- fileContents(spinPath)
       lines = getLines(file).zipWithIndex
       consts <- constants(lines)
-      elm = new Instructions[F]()
+      elm = new Instructions[F](consts)
 //      _ <- printVals(consts)
       parsed <- spinParse(lines, elm)
 //      _ <- printRun(parsed.map(_._1), elm)
 //      _ <- printInstructions(parsed.map(_._1), elm)
-//      _ <- runInstructions(parsed.map(_._1), elm)
+      _ <- runInstructions(parsed.map(_._1), elm)
       _ <- checkDifference(parsed, lines)
-//      _ <- blah(elm)
-      _ = elm.setSamplerate(44100)
-      sim <- Sync[F].delay(new SpinSimulator(elm, testWav, null, 1, 1,1))
+      sim <- Sync[F].delay(new SpinSimulator(elm, testWav, null, 0.5, 0.5, 0.5))
       _ = sim.showInteractiveControls()
       _ = sim.showLevelLogger()
       _ = sim.setLoopMode(true)
