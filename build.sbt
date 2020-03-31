@@ -2,7 +2,7 @@ import Dependencies._
 
 ThisBuild / scalaVersion     := "2.13.1"
 
-unmanagedJars in Compile += file("src/main/scala/org/andrewkilpatrick/elmGen/elmGen-0.5.jar")
+unmanagedJars in Compile += file("src/main/java/org/andrewkilpatrick/elmGen/elmGen-0.5.jar")
 
 scalafmtConfig in ThisBuild := baseDirectory.value / ".scalafmt.conf"
 

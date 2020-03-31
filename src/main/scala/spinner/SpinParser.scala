@@ -27,9 +27,11 @@ trait SpinParser[F[_]] extends RegexParsers with CommonParsers {
     def rdax: Parser[(InstructionValue, InstructionValue) => instructions.Rdax] =
       "rdax".r ^^ (_ => instructions.Rdax)
 
-    def rda: Parser[(InstructionValue, InstructionValue) => instructions.Rda] = "rda".r ^^ (_ => instructions.Rda)
+    def rda: Parser[(InstructionValue, InstructionValue) => instructions.Rda] =
+      "rda".r ^^ (_ => instructions.Rda)
 
-    def wra: Parser[(InstructionValue, InstructionValue) => instructions.Wra] = "wra".r ^^ (_ => instructions.Wra)
+    def wra: Parser[(InstructionValue, InstructionValue) => instructions.Wra] =
+      "wra".r ^^ (_ => instructions.Wra)
 
     def wrap = "wrap".r ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
       case _ ~ addr ~ _ ~ scale => instructions.Wrap(addr, scale)
@@ -121,7 +123,7 @@ trait SpinParser[F[_]] extends RegexParsers with CommonParsers {
     def choParser = choRda | choSfo | choRdal
 
     def paramDoubleParamDouble: Parser[Instruction[F]] =
-      (rdax | wrax | rdfx | wrhx | wrlx | sof | exp | log | rda | wra ) ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
+      (rdax | wrax | rdfx | wrhx | wrlx | sof | exp | log | rda | wra) ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
         case instruction ~ d1 ~ _ ~ d2 => instruction(d1, d2)
       }
 
@@ -133,7 +135,8 @@ trait SpinParser[F[_]] extends RegexParsers with CommonParsers {
 
 //    def loopParser: Parser[Instruction[F]] = "loop".r ^^ (_ => instructions.Loop)
 
-    def loopLabel: Parser[Instruction[F]] = ("endclr".r | "endset".r | "loop")  ^^ instructions.SkipLabel
+    def loopLabel: Parser[Instruction[F]] =
+      ("endclr".r | "endset".r | "loop") ^^ instructions.SkipLabel
 
     paramDoubleParamDouble | memParser | wrap | paramDoubleDoubleDouble | equParser | skpParser | clr | mulxParser | andParser | orParser | choParser | rmpa | loopLabel | eof
 

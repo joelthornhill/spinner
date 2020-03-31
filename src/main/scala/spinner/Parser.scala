@@ -67,7 +67,7 @@ trait Parser extends RegexParsers {
 
   def wordWithHash: Parser[InstructionValue] =
     wordRegex ~ "#".r ^^ {
-      case word ~ _  => WithArithmetic(DelayEnd(StringValue(word)))
+      case word ~ _ => WithArithmetic(DelayEnd(StringValue(word)))
     }
 
   def wordWithCarat: Parser[InstructionValue] =
@@ -81,7 +81,6 @@ trait Parser extends RegexParsers {
 //      case word ~ _ ~ _ ~ _ => WithArithmetic(MidpointDelay(StringValue(word)))
 //    }
 
-
   def orWord: Parser[InstructionValue] =
     """([a-zA-Z0-9_]+\s?\|\s?)+[a-zA-Z0-9_]+""".r ^^ { word =>
       WithArithmetic(Or(word.split("\\|").toList.map(a => StringValue(a.trim))))
@@ -91,5 +90,5 @@ trait Parser extends RegexParsers {
     orWord | wordWithDivision | wordWithAddition | wordWithMultiplication | wordWithHash | singleWord
 
   def double: Parser[InstructionValue] =
-     doubleWithDivision | doubleWithAddition | doubleWithMultiplication | singleDouble
+    doubleWithDivision | doubleWithAddition | doubleWithMultiplication | singleDouble
 }

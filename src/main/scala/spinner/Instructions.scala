@@ -7,16 +7,19 @@ import cats.syntax.functor._
 import cats.syntax.applicativeError._
 import org.andrewkilpatrick.elmGen.SpinProgram
 
-class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends SpinProgram("Parser") {
+class Instructions[F[_]: Sync](consts: Map[String, InstructionValue])
+    extends SpinProgram("Parser") {
+
+  setSamplerate(44100)
 
   def getInt(addr: InstructionValue): F[Int] =
     getDouble(addr).flatMap(d => Sync[F].catchNonFatal(d.toInt))
 
   def getDouble(addr: InstructionValue): F[Double] = {
     addr match {
-      case DoubleValue(value)     => Sync[F].pure(value)
-      case StringValue(value)     => findInReserved(value).handleErrorWith(_ => findInConsts(value))
-      case WithArithmetic(value)  => calculateArithmetic(value)
+      case DoubleValue(value)    => Sync[F].pure(value)
+      case StringValue(value)    => findInReserved(value).handleErrorWith(_ => findInConsts(value))
+      case WithArithmetic(value) => calculateArithmetic(value)
     }
   }
 
@@ -33,16 +36,17 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends Sp
               case Some(StringValue(stringValue)) =>
                 findInReserved(stringValue).attempt flatMap {
                   case Right(v) => Sync[F].pure(v)
-                  case _ => Sync[F].raiseError(new Exception(s"Could not find: $stringValue in consts"))
+                  case _ =>
+                    Sync[F].raiseError(new Exception(s"Could not find: $stringValue in consts"))
                 }
-              case Some(DoubleValue(doubleValue)) => Sync[F].pure(doubleValue)
+              case Some(DoubleValue(doubleValue))       => Sync[F].pure(doubleValue)
               case Some(WithArithmetic(withArithmetic)) => calculateArithmetic(withArithmetic)
-              case _ => Sync[F].raiseError(new Exception(s"Could not find $value in consts"))
+              case _                                    => Sync[F].raiseError(new Exception(s"Could not find $value in consts"))
             }
         }
-      case Some(DoubleValue(value)) => Sync[F].pure(value)
+      case Some(DoubleValue(value))    => Sync[F].pure(value)
       case Some(WithArithmetic(value)) => calculateArithmetic(value)
-      case None => Sync[F].raiseError(new Exception(s"Could not find: $s in consts"))
+      case None                        => Sync[F].raiseError(new Exception(s"Could not find: $s in consts"))
     }
   }
 
@@ -64,15 +68,17 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends Sp
           a <- getDouble(a)
           b <- getDouble(b)
         } yield a * b
-      case DelayEnd(_)            => Sync[F].raiseError(new Exception("Delay end should be handled elsewhere"))
-      case MidpointDelay(_)       => Sync[F].raiseError(new Exception("Midpoint should be handled elsewhere"))
+      case DelayEnd(_) => Sync[F].raiseError(new Exception("Delay end should be handled elsewhere"))
+      case MidpointDelay(_) =>
+        Sync[F].raiseError(new Exception("Midpoint should be handled elsewhere"))
       case ParserCombinator.Or(l) =>
-        l.foldLeft(Sync[F].pure(0.0)) { case (acc, b) =>
-          for {
-            left <- acc
-            right <- getDouble(b)
-            asDouble <- getDouble(DoubleValue((left.toInt | right.toInt).toDouble))
-          } yield asDouble
+        l.foldLeft(Sync[F].pure(0.0)) {
+          case (acc, b) =>
+            for {
+              left <- acc
+              right <- getDouble(b)
+              asDouble <- getDouble(DoubleValue((left.toInt | right.toInt).toDouble))
+            } yield asDouble
         }
     }
   }
@@ -126,7 +132,8 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends Sp
             Sync[F].delay(println(s"""readDelay(\"$value\", ${offset.toInt}, $scale)"""))
           case StringValue(value) =>
             Sync[F].delay(println(s"""readDelay(\"$value\", 0.0, $scale)"""))
-          case _ => getInt(addr).flatMap(addr => Sync[F].delay(println(s"readDelay($addr, $scale)")))
+          case _ =>
+            getInt(addr).flatMap(addr => Sync[F].delay(println(s"readDelay($addr, $scale)")))
         }
       } yield run
 
@@ -180,7 +187,8 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends Sp
             Sync[F].delay(println(s"""writeAllpass(\"$value\", 0.5, $scale"""))
           case StringValue(value) =>
             Sync[F].delay(println(s"""writeAllpass(\"$value\", 0.0, $scale)"""))
-          case _ => getInt(addr).flatMap(addr => Sync[F].delay(println(s"writeAllpass($addr, $scale)")))
+          case _ =>
+            getInt(addr).flatMap(addr => Sync[F].delay(println(s"writeAllpass($addr, $scale)")))
         }
       } yield run
 
@@ -218,7 +226,8 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends Sp
             Sync[F].delay(println(s"""writeDelay(\"$value\", ${offset.toInt}, $scale)"""))
           case StringValue(value) =>
             Sync[F].delay(println(s"""writeDelay(\"$value\", 0.0, $scale)"""))
-          case _ => getInt(addr).flatMap(addr => Sync[F].delay(println(s"writeDelay($addr, $scale)")))
+          case _ =>
+            getInt(addr).flatMap(addr => Sync[F].delay(println(s"writeDelay($addr, $scale)")))
         }
       } yield run
 
@@ -249,7 +258,8 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends Sp
 
   case class Equ(name: String, value: InstructionValue) extends Instruction[F] {
     def run() = Sync[F].unit // Do nothing
-    def runString() = Sync[F].delay(println(s"val $name = ${value.spinString.toUpperCase}")) // Do nothing
+    def runString() =
+      Sync[F].delay(println(s"val $name = ${value.spinString.toUpperCase}")) // Do nothing
     override def toString = ""
 
     override def spinInstruction(): String = s"equ $name ${value.spinString}"
@@ -257,7 +267,8 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends Sp
 
   case class Mem(name: String, value: InstructionValue) extends Instruction[F] {
     def run() = getInt(value).flatMap(size => Sync[F].delay(allocDelayMem(name, size)))
-    def runString() = getInt(value).flatMap(size => Sync[F].delay(println(s"""allocDelayMem("$name", $size)""")))
+    def runString() =
+      getInt(value).flatMap(size => Sync[F].delay(println(s"""allocDelayMem("$name", $size)""")))
 
     override def toString = s"allocDelayMem($name, $value)"
 
@@ -277,7 +288,7 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends Sp
         flags <- getInt(flags)
         run <- nSkip match {
           case StringValue(_) => Sync[F].unit
-          case _ => getInt(nSkip).flatMap(nSkip => Sync[F].delay(skip(flags, nSkip)))
+          case _              => getInt(nSkip).flatMap(nSkip => Sync[F].delay(skip(flags, nSkip)))
         }
       } yield run
 
@@ -368,7 +379,8 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends Sp
 
     override def toString: String = s"loadRampLFO($lfo, $freq, $amp)"
 
-    override def spinInstruction(): String = s"wldr ${lfo.spinString},${freq.spinString},${amp.spinString}"
+    override def spinInstruction(): String =
+      s"wldr ${lfo.spinString},${freq.spinString},${amp.spinString}"
   }
 
   case class ChoRda(lfo: InstructionValue, flags: InstructionValue, addr: InstructionValue)
@@ -391,13 +403,17 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends Sp
         run <- addr match {
           case WithArithmetic(Addition(StringValue(value), DoubleValue(offset))) =>
             Sync[F].delay(println(s"chorusReadDelay($lfo, $flags, $value, ${offset.toInt})"))
-          case _ => getInt(addr).flatMap(addr => Sync[F].delay(println(s"chorusReadDelay($lfo, $flags, $addr)")))
+          case _ =>
+            getInt(addr).flatMap(addr =>
+              Sync[F].delay(println(s"chorusReadDelay($lfo, $flags, $addr)"))
+            )
         }
       } yield run
 
     override def toString: String = s"chorusReadDelay($lfo, $flags, $addr)"
 
-    override def spinInstruction(): String = s"cho rda, ${lfo.spinString},${flags.spinString},${addr.spinString}"
+    override def spinInstruction(): String =
+      s"cho rda, ${lfo.spinString},${flags.spinString},${addr.spinString}"
   }
 
   case class ChoSof(lfo: InstructionValue, flags: InstructionValue, offset: InstructionValue)
@@ -420,7 +436,8 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends Sp
 
     override def toString: String = s"chorusScaleOffset($lfo, $flags, $offset)"
 
-    override def spinInstruction(): String = s"cho sof,${lfo.spinString},${flags.spinString},${offset.spinString}"
+    override def spinInstruction(): String =
+      s"cho sof,${lfo.spinString},${flags.spinString},${offset.spinString}"
   }
 
   case class ChoRdal(lfo: InstructionValue) extends Instruction[F] {
@@ -452,7 +469,8 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends Sp
 
     override def toString: String = s"loadSinLFO($lfo, $freq, $amp)"
 
-    override def spinInstruction(): String = s"wlds ${lfo.spinString},${freq.spinString},${amp.spinString}"
+    override def spinInstruction(): String =
+      s"wlds ${lfo.spinString},${freq.spinString},${amp.spinString}"
   }
 
   case class Rdfx(addr: InstructionValue, scale: InstructionValue) extends Instruction[F] {
@@ -478,7 +496,8 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue]) extends Sp
 
   case class Rmpa(scale: InstructionValue) extends Instruction[F] {
     def run() = getDouble(scale).flatMap(scale => Sync[F].delay(readDelayPointer(scale)))
-    def runString() = getDouble(scale).flatMap(scale => Sync[F].delay(println(s"readDelayPointer($scale)")))
+    def runString() =
+      getDouble(scale).flatMap(scale => Sync[F].delay(println(s"readDelayPointer($scale)")))
 
     override def toString: String = s"readDelayPointer($scale)"
 

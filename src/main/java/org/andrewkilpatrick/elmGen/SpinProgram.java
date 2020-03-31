@@ -29,7 +29,6 @@ import org.andrewkilpatrick.elmGen.instructions.ChorusReadDelay;
 import org.andrewkilpatrick.elmGen.instructions.ChorusReadValue;
 import org.andrewkilpatrick.elmGen.instructions.ChorusScaleOffset;
 import org.andrewkilpatrick.elmGen.instructions.Clear;
-import org.andrewkilpatrick.elmGen.instructions.Comment;
 import org.andrewkilpatrick.elmGen.instructions.Exp;
 import org.andrewkilpatrick.elmGen.instructions.Instruction;
 import org.andrewkilpatrick.elmGen.instructions.Jam;
@@ -68,7 +67,6 @@ public class SpinProgram implements Serializable {
 	protected String name;
 	private List<MemSegment> memoryMap;
 	private List<Instruction> instList;
-	private int nComments = 0;
 
 	public static final int MAX_DELAY_MEM = 32767;
 	public static final int MAX_CODE_LEN = 128;
@@ -174,15 +172,14 @@ public class SpinProgram implements Serializable {
 		this.name = name;
 		memoryMap = new LinkedList<MemSegment>();
 		instList = new LinkedList<Instruction>();
-		nComments = 0;
 	}
 
-	public static void setSamplerate(int samplerate) {
+	public void setSamplerate(int samplerate) {
 		if (samplerate < 32000 || samplerate > 48000) {
 			throw new ElmProgramException(
 					"samplerate must be: 32000 to 48000Hz");
 		}
-		SpinProgram.SAMPLERATE = samplerate;
+		ElmProgram.SAMPLERATE = samplerate;
 	}
 
 	public static int getSamplerate() {
@@ -297,7 +294,7 @@ public class SpinProgram implements Serializable {
 	 *             if the code length is max.
 	 */
 	public void checkCodeLen() {
-		if ((getCodeLen() - getNumComments()) >= MAX_CODE_LEN) {
+		if (getCodeLen() >= MAX_CODE_LEN) {
 
 			// throw new ElmProgramException("max program length reached: " +
 			// MAX_CODE_LEN);
@@ -315,10 +312,6 @@ public class SpinProgram implements Serializable {
 	 */
 	public int getCodeLen() {
 		return instList.size();
-	}
-
-	public int getNumComments() {
-		return nComments;
 	}
 
 
@@ -827,22 +820,6 @@ public class SpinProgram implements Serializable {
 	public void chorusReadDelay(int lfo, int flags, int addr) {
 		//checkCodeLen();
 		instList.add(new ChorusReadDelay(lfo, flags, addr));
-	}
-
-	/**
-	 * Reads from the delay memory with the read pointer value modulated by the
-	 * selected LFO.
-	 * 
-	 * @param lfo
-	 *            the LFO to use
-	 * @param flags
-	 *            the flags
-	 * @param addr
-	 *            the base offset in delay memory
-	 */
-	public void comment(String s) {
-		nComments = nComments + 1;
-		instList.add(new Comment(s));
 	}
 
 	/**
