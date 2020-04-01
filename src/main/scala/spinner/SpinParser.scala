@@ -2,11 +2,12 @@ package spinner
 import spinner.Instruction.Instruction
 import spinner.ParserCombinator._
 
+import scala.util.matching.Regex
 import scala.util.parsing.combinator._
 
 trait CommonParsers extends RegexParsers with Parser {
 
-  val wordRegex = """[a-zA-Z0-9_]+""".r
+  val wordRegex: Regex = """[a-zA-Z0-9_]+""".r
 
   def comma: Parser[String] = ",".r ^^ (_.toString)
 
@@ -172,19 +173,19 @@ object ParserCombinator {
   case class Addition(a: InstructionValue, b: InstructionValue) extends Arithmetic {
     override def spinString: String = s"${a.spinString}+${b.spinString}"
   }
-  case class Minus(a: InstructionValue) extends Arithmetic {
-    override def spinString: String = s"-${a.spinString}"
+  case class Minus(value: InstructionValue) extends Arithmetic {
+    override def spinString: String = s"-${value.spinString}"
   }
   case class Multiplication(a: InstructionValue, b: InstructionValue) extends Arithmetic {
     override def spinString: String = s"${a.spinString}*${b.spinString}"
   }
-  case class DelayEnd(a: InstructionValue) extends Arithmetic {
-    override def spinString: String = s"${a.spinString}#"
+  case class DelayEnd(value: InstructionValue) extends Arithmetic {
+    override def spinString: String = s"${value.spinString}#"
   }
-  case class MidpointDelay(a: InstructionValue) extends Arithmetic {
-    override def spinString: String = s"${a.spinString}^"
+  case class MidpointDelay(value: InstructionValue) extends Arithmetic {
+    override def spinString: String = s"${value.spinString}^"
   }
-  case class Or(a: List[InstructionValue]) extends Arithmetic {
-    override def spinString: String = s"${a.map(_.spinString).mkString("|")}"
+  case class Or(value: List[InstructionValue]) extends Arithmetic {
+    override def spinString: String = s"${value.map(_.spinString).mkString("|")}"
   }
 }

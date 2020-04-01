@@ -6,17 +6,15 @@ import scala.util.parsing.combinator.RegexParsers
 
 trait Parser extends RegexParsers {
   private val wordRegex = """[a-zA-Z0-9_]+""".r
-//  private val doubleRegex = """((?:[0-9]{1,10})(?:[.][0-9]{1,10})?)""".r
-
-  private val doubleR = """(\d+(\.\d*))""".r ^^ (_.toDouble)
-  private val intRegex = """\d+""".r ^^ (_.toDouble)
+  private val doubleParser = """(\d+(\.\d*))""".r ^^ (_.toDouble)
+  private val intParser = """\d+""".r ^^ (_.toDouble)
 
   private def singleWord: Parser[InstructionValue] = opt("-".r) ~ wordRegex ^^ {
     case Some(_) ~ word => WithArithmetic(Minus(StringValue(word)))
     case None ~ word    => StringValue(word)
   }
 
-  private def singleDouble: Parser[InstructionValue] = opt("-".r) ~ (doubleR | intRegex) ^^ {
+  private def singleDouble: Parser[InstructionValue] = opt("-".r) ~ (doubleParser | intParser) ^^ {
     case Some(_) ~ double => WithArithmetic(Minus(DoubleValue(double)))
     case None ~ double    => DoubleValue(double)
   }

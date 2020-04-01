@@ -1,6 +1,8 @@
 package spinner
 import cats.effect.Sync
+import spinner.Instruction.AddrScale
 import spinner.Instruction.Instruction
+import spinner.Instruction.ScaleOffset
 import spinner.ParserCombinator._
 import cats.syntax.flatMap._
 import cats.syntax.functor._
@@ -22,6 +24,18 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue])
       case WithArithmetic(value) => calculateArithmetic(value)
     }
   }
+
+  private def addrScale(addr: InstructionValue, scale: InstructionValue): F[AddrScale] =
+    for {
+      addr <- getInt(addr)
+      scale <- getDouble(scale)
+    } yield AddrScale(addr, scale)
+
+  private def scaleOffset(scale: InstructionValue, offset: InstructionValue): F[ScaleOffset] =
+    for {
+      scale <- getDouble(scale)
+      offset <- getDouble(offset)
+    } yield ScaleOffset(scale, offset)
 
   def findInReserved(s: String): F[Double] =
     Sync[F].catchNonFatal(ReservedWord.withName(s.toUpperCase).value.toDouble)
@@ -62,7 +76,7 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue])
           a <- getDouble(a)
           b <- getDouble(b)
         } yield a + b
-      case Minus(a) => getDouble(a).map(-_)
+      case Minus(value) => getDouble(value).map(-_)
       case Multiplication(a, b) =>
         for {
           a <- getDouble(a)
@@ -71,8 +85,8 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue])
       case DelayEnd(_) => Sync[F].raiseError(new Exception("Delay end should be handled elsewhere"))
       case MidpointDelay(_) =>
         Sync[F].raiseError(new Exception("Midpoint should be handled elsewhere"))
-      case ParserCombinator.Or(l) =>
-        l.foldLeft(Sync[F].pure(0.0)) {
+      case ParserCombinator.Or(value) =>
+        value.foldLeft(Sync[F].pure(0.0)) {
           case (acc, b) =>
             for {
               left <- acc
@@ -84,22 +98,11 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue])
   }
 
   case class Rdax(addr: InstructionValue, scale: InstructionValue) extends Instruction[F] {
-    def run(): F[Unit] =
-      for {
-        addr <- getInt(addr)
-        scale <- getDouble(scale)
-        run <- Sync[F].delay(readRegister(addr, scale))
-      } yield run
-
+    private val AS = addrScale(addr, scale)
+    def run(): F[Unit] = AS.flatMap(as => Sync[F].delay(readRegister(as.addr, as.scale)))
     def runString(): F[Unit] =
-      for {
-        addr <- getInt(addr)
-        scale <- getDouble(scale)
-        run <- Sync[F].delay(println(s"readRegister($addr, $scale)"))
-      } yield run
-
+      AS.flatMap(as => Sync[F].delay(println(s"readRegister(${as.addr}, ${as.scale})")))
     override def toString = s"readRegister(${addr.toString}, $scale)"
-
     override def spinInstruction(): String = s"rdax ${addr.spinString},${scale.spinString}"
   }
 
@@ -143,22 +146,11 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue])
   }
 
   case class Wrax(addr: InstructionValue, scale: InstructionValue) extends Instruction[F] {
-    def run() =
-      for {
-        addr <- getInt(addr)
-        scale <- getDouble(scale)
-        run <- Sync[F].delay(writeRegister(addr, scale))
-      } yield run
-
-    def runString() =
-      for {
-        addr <- getInt(addr)
-        scale <- getDouble(scale)
-        run <- Sync[F].delay(println(s"writeRegister($addr, $scale)"))
-      } yield run
-
+    private val AS = addrScale(addr, scale)
+    def run(): F[Unit] = AS.flatMap(as => Sync[F].delay(writeRegister(as.addr, as.scale)))
+    def runString(): F[Unit] =
+      AS.flatMap(as => Sync[F].delay(println(s"writeRegister(${as.addr}, ${as.scale})")))
     override def toString = s"writeRegister($addr, $scale)"
-
     override def spinInstruction(): String = s"wrax ${addr.spinString}, ${scale.spinString}"
   }
 
@@ -474,23 +466,11 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue])
   }
 
   case class Rdfx(addr: InstructionValue, scale: InstructionValue) extends Instruction[F] {
-
-    def run() =
-      for {
-        addr <- getInt(addr)
-        scale <- getDouble(scale)
-        run <- Sync[F].delay(readRegisterFilter(addr, scale))
-      } yield run
-
-    def runString() =
-      for {
-        addr <- getInt(addr)
-        scale <- getDouble(scale)
-        run <- Sync[F].delay(println(s"readRegisterFilter($addr, $scale)"))
-      } yield run
-
+    private val AS = addrScale(addr, scale)
+    def run(): F[Unit] = AS.flatMap(as => Sync[F].delay(readRegisterFilter(as.addr, as.scale)))
+    def runString(): F[Unit] =
+      AS.flatMap(as => Sync[F].delay(println(s"readRegisterFilter(${as.addr}, ${as.scale})")))
     override def toString: String = s"readRegisterFilter($addr, $scale)"
-
     override def spinInstruction(): String = s"rdfx ${addr.spinString}, ${scale.spinString}"
   }
 
@@ -505,62 +485,29 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue])
   }
 
   case class Wrlx(addr: InstructionValue, scale: InstructionValue) extends Instruction[F] {
-    def run() =
-      for {
-        addr <- getInt(addr)
-        scale <- getDouble(scale)
-        run <- Sync[F].delay(writeRegisterLowshelf(addr, scale))
-      } yield run
-
-    def runString() =
-      for {
-        addr <- getInt(addr)
-        scale <- getDouble(scale)
-        run <- Sync[F].delay(writeRegisterLowshelf(addr, scale))
-      } yield run
-
+    private val AS = addrScale(addr, scale)
+    def run(): F[Unit] = AS.flatMap(as => Sync[F].delay(writeRegisterLowshelf(as.addr, as.scale)))
+    def runString(): F[Unit] =
+      AS.flatMap(as => Sync[F].delay(println(s"writeRegisterLowshelf(${as.addr}, ${as.scale})")))
     override def toString: String = s"writeRegisterLowshelf($addr, $scale)"
-
     override def spinInstruction(): String = s"wrlx ${addr.spinString},${scale.spinString}"
   }
 
   case class Wrhx(addr: InstructionValue, scale: InstructionValue) extends Instruction[F] {
-    def run() =
-      for {
-        addr <- getInt(addr)
-        scale <- getDouble(scale)
-        run <- Sync[F].delay(writeRegisterHighshelf(addr, scale))
-      } yield run
-
-    def runString() =
-      for {
-        addr <- getInt(addr)
-        scale <- getDouble(scale)
-        run <- Sync[F].delay(println(s"writeRegisterHighshelf($addr, $scale)"))
-      } yield run
-
+    private val AS = addrScale(addr, scale)
+    def run(): F[Unit] = AS.flatMap(as => Sync[F].delay(writeRegisterHighshelf(as.addr, as.scale)))
+    def runString(): F[Unit] =
+      AS.flatMap(as => Sync[F].delay(println(s"writeRegisterHighshelf(${as.addr}, ${as.scale})")))
     override def toString: String = s"writeRegisterHighshelf($addr, $scale)"
-
     override def spinInstruction(): String = s"wrhx ${addr.spinString}, ${scale.spinString}"
   }
 
   case class Log(scale: InstructionValue, offset: InstructionValue) extends Instruction[F] {
-    def run() =
-      for {
-        scale <- getDouble(scale)
-        offset <- getDouble(offset)
-        run <- Sync[F].delay(log(scale, offset))
-      } yield run
-
-    def runString() =
-      for {
-        scale <- getDouble(scale)
-        offset <- getDouble(offset)
-        run <- Sync[F].delay(println(s"log($scale, $offset)"))
-      } yield run
-
+    private val SO = scaleOffset(scale, offset)
+    def run(): F[Unit] = SO.flatMap(so => Sync[F].delay(log(so.scale, so.offset)))
+    def runString(): F[Unit] =
+      SO.flatMap(so => Sync[F].delay(println(s"log(${so.scale}, ${so.offset})")))
     override def toString: String = s"log($scale, $offset)"
-
     override def spinInstruction(): String = s"log ${scale.spinString},${offset.spinString}"
   }
 
@@ -596,4 +543,7 @@ object Instruction {
     def runString(): F[Unit]
     def spinInstruction(): String
   }
+
+  case class AddrScale(addr: Int, scale: Double)
+  case class ScaleOffset(scale: Double, offset: Double)
 }
