@@ -84,6 +84,13 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue])
     override def spinInstruction(): String = s"wrax ${addr.spinString}, ${scale.spinString}"
   }
 
+  case class Maxx(addr: InstructionValue, scale: InstructionValue) extends Instruction[F] {
+    def run(): F[Unit] = runnerID(addr, scale, maxx)
+    def runString(): F[Unit] = runnerID(addr, scale, (i, d) => println(s"maxx($i, $d)"))
+    override def toString = s"maxx($addr, $scale)"
+    override def spinInstruction(): String = s"maxx ${addr.spinString}, ${scale.spinString}"
+  }
+
   case class Wrap(addr: InstructionValue, scale: InstructionValue) extends Instruction[F] {
     def run(): F[Unit] = handleAllOffsets(
       addr,
@@ -178,9 +185,9 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue])
         run <- Sync[F].delay(println(s"skip($flags, $nSkip)"))
       } yield run
 
-    override def toString: String = s"skip($flags, $nSkip)"
+    override def toString: String = s"skp($flags, $nSkip)"
 
-    override def spinInstruction(): String = s"skip ${flags.spinString},${nSkip.spinString}"
+    override def spinInstruction(): String = s"skp ${flags.spinString},${nSkip.spinString}"
   }
 
 //  case class Skp2(flags: InstructionValue, point: String) extends Instruction[F] {
@@ -197,7 +204,7 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue])
     def run(): F[Unit] = Sync[F].unit
     def runString(): F[Unit] = Sync[F].delay(println("Skip Label does nothing"))
 
-    override def spinInstruction(): String = s"Skip label: $label"
+    override def spinInstruction(): String = s"$label:"
   }
 
   case object Clr extends Instruction[F] {
@@ -205,6 +212,13 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue])
     def runString(): F[Unit] = Sync[F].delay(println("clear()"))
     override def toString: String = "clear()"
     override def spinInstruction(): String = "clr"
+  }
+
+  case object Absa extends Instruction[F] {
+    def run(): F[Unit] = Sync[F].delay(absa())
+    def runString(): F[Unit] = Sync[F].delay(println("absa()"))
+    override def toString: String = "absa()"
+    override def spinInstruction(): String = "absa"
   }
 
   case class Exp(scale: InstructionValue, offset: InstructionValue) extends Instruction[F] {
@@ -219,6 +233,13 @@ class Instructions[F[_]: Sync](consts: Map[String, InstructionValue])
     def runString(): F[Unit] = runner(addr, i => println(s"mulx($i)"))
     override def toString: String = s"mulx($addr)"
     override def spinInstruction(): String = s"mulx ${addr.spinString}"
+  }
+
+  case class Xor(mask: InstructionValue) extends Instruction[F] {
+    def run(): F[Unit] = runner(mask, xor)
+    def runString(): F[Unit] = runner(mask, i => println(s"xor($i)"))
+    override def toString: String = s"xor($mask)"
+    override def spinInstruction(): String = s"xor ${mask.spinString}"
   }
 
   case class Wldr(lfo: InstructionValue, freq: InstructionValue, amp: InstructionValue)

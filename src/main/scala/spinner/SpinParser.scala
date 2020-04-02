@@ -24,7 +24,7 @@ trait SpinParser[F[_]] extends RegexParsers with CommonParsers {
     def eof: Parser[Instruction[F]] = """^\s*$""".r ^^ (_ => instructions.EOF)
 
     // Instructions
-    // TODO: maxx, absa, xor, jam, nop, not
+    // TODO: xor, jam, nop, not
     def rdax: Parser[(InstructionValue, InstructionValue) => instructions.Rdax] =
       "rdax".r ^^ (_ => instructions.Rdax)
 
@@ -50,6 +50,8 @@ trait SpinParser[F[_]] extends RegexParsers with CommonParsers {
     def rmpa: Parser[Instruction[F]] = "rmpa".r ~ reservedOrStringOrDouble ^^ {
       case _ ~ lfo => instructions.Rmpa(lfo)
     }
+
+    def maxx: Parser[(InstructionValue, InstructionValue) => instructions.Maxx] = "maxx".r ^^ (_ => instructions.Maxx)
 
     def log: Parser[(InstructionValue, InstructionValue) => instructions.Log] =
       "log".r ^^ (_ => instructions.Log)
@@ -98,6 +100,8 @@ trait SpinParser[F[_]] extends RegexParsers with CommonParsers {
 
     def clr: Parser[Instruction[F]] = "clr".r ^^ (_ => instructions.Clr)
 
+    def absa: Parser[Instruction[F]] = "absa".r ^^ (_ => instructions.Absa)
+
     def choRda: Parser[Instruction[F]] =
       "cho".r ~ "rda".r ~ comma ~ opt(reservedOrStringOrDouble) ~ comma ~ opt(
         reservedOrStringOrDouble
@@ -124,7 +128,7 @@ trait SpinParser[F[_]] extends RegexParsers with CommonParsers {
     def choParser = choRda | choSfo | choRdal
 
     def paramDoubleParamDouble: Parser[Instruction[F]] =
-      (rdax | wrax | rdfx | wrhx | wrlx | sof | exp | log | rda | wra) ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
+      (rdax | wrax | rdfx | wrhx | wrlx | sof | exp | log | rda | wra | maxx) ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
         case instruction ~ d1 ~ _ ~ d2 => instruction(d1, d2)
       }
 
@@ -139,7 +143,7 @@ trait SpinParser[F[_]] extends RegexParsers with CommonParsers {
     def loopLabel: Parser[Instruction[F]] =
       ("endclr".r | "endset".r | "loop") ^^ instructions.SkipLabel
 
-    paramDoubleParamDouble | memParser | wrap | paramDoubleDoubleDouble | equParser | skpParser | clr | mulxParser | andParser | orParser | choParser | rmpa | loopLabel | eof
+    paramDoubleParamDouble | memParser | wrap | paramDoubleDoubleDouble | equParser | skpParser | clr | mulxParser | andParser | orParser | choParser | rmpa | absa | loopLabel | eof
 
   }
 }
