@@ -23,18 +23,15 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
 
   def checkDifference(
     instructions: List[Instruction[F]],
-    lines: List[(String, Int)]
+    lines: List[String]
   ): F[List[Unit]] =
     instructions
-      .zip(lines)
+      .map(_.spinInstruction().replaceAll("\\s", ""))
+      .zip(lines.map(_.replaceAll("\\s", "")))
       .map {
-        case (instruction, spin) =>
-          val a = instruction.spinInstruction().replaceAll("\\s", "")
-          val b = spin._1.replaceAll("\\s", "")
-
-          if (a != b) {
-            Sync[F].delay(println(s"$a did not equal $b"))
-          } else Sync[F].unit
+        case (instruction, spin) if instruction != spin =>
+          Sync[F].delay(println(s"$instruction did not equal $spin"))
+        case _ => Sync[F].unit
       }
       .sequence
 
@@ -78,32 +75,39 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
       .filterNot(_.startsWith(";"))
       .filterNot(_.isEmpty)
 
-  def constants(lines: List[(String, Int)]): F[Map[String, InstructionValue]] = Sync[F].delay(
-    lines
+  def handleResult[T](
+    parseResult: ParseResult[T],
+    index: Int,
+    linesWithIndex: List[(String, Int)]
+  ): F[T] =
+    parseResult match {
+      case Success(matched, _) => Sync[F].pure(matched)
+      case NoSuccess(reason, _) =>
+        Sync[F].raiseError(
+          new Exception(
+            s"Could not parse: ${linesWithIndex.find(_._2 == index).map(_._1).getOrElse(reason)}"
+          )
+        )
+    }
+
+  def constants(linesWithIndex: List[(String, Int)]): F[Map[String, InstructionValue]] = {
+    linesWithIndex
       .sortBy(_._2)
-      .flatMap(line =>
-        parse(equParser, line._1) match {
-          case Success(matched: Map[String, InstructionValue], _) => Some(matched)
-          case _                                                  => None
-        }
-      )
-      .flatten
-      .toMap
-  )
+      .map(line => Sync[F].delay(parse(equParser, line._1)))
+      .sequence
+      .flatMap(_.mapWithIndex { case (r, i) => handleResult(r, i, linesWithIndex) }.sequence)
+      .map(_.flatten.toMap)
+  }
 
   def spinParse(
-    lines: List[(String, Int)],
+    linesWithIndex: List[(String, Int)],
     program: Instructions[F]
-  ): F[List[Instruction[F]]] = Sync[F].delay(
-    lines
+  ): F[List[Instruction[F]]] =
+    linesWithIndex
       .sortBy(_._2)
-      .flatMap(line =>
-        parse(parsed(program), line._1) match {
-          case Success(matched, _) => Some(matched)
-          case _                   => None
-        }
-      )
-  )
+      .map(line => Sync[F].delay(parse(parsed(program), line._1)))
+      .sequence
+      .flatMap(_.mapWithIndex { case (r, i) => handleResult(r, i, linesWithIndex) }.sequence)
 
   def fileContents(filePath: String): F[String] =
     Resource
@@ -114,7 +118,7 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
     val acquire: F[SpinSimulator] =
       Sync[F].delay(new simulator.SpinSimulator(program, testWav, null, 0.5, 0.5, 0.5))
     val release: SpinSimulator => F[Unit] = simulator =>
-      Sync[F].delay(println("Stopping simulator")) >> Sync[F].delay(simulator.stopSimulator())
+      Sync[F].delay(println("Stopping simulator")).as(simulator.stopSimulator())
     val simulatorResource = Resource.make(acquire)(release)
 
     for {
@@ -135,7 +139,7 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
       _ <- printRun(parsed, program)
       //      _ <- printInstructions(parsed.map(_._1), elm)
       _ <- runInstructions(parsed, program)
-      _ <- checkDifference(parsed, lines)
+      _ <- checkDifference(parsed, lines.map(_._1))
       _ <- runSimulator(program, testWav).use(s => Sync[F].delay(s.run()))
     } yield ()
 }
