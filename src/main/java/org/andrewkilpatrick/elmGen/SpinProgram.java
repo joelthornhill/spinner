@@ -65,8 +65,8 @@ public class SpinProgram implements Serializable {
 	 */
 	private static final long serialVersionUID = 3718907348318020286L;
 	protected String name;
-	private List<MemSegment> memoryMap;
-	private List<Instruction> instList;
+	public LinkedList<MemSegment> memoryMap;
+	public LinkedList<Instruction> instList;
 
 	public static final int MAX_DELAY_MEM = 32767;
 	public static final int MAX_CODE_LEN = 128;
@@ -172,6 +172,14 @@ public class SpinProgram implements Serializable {
 		this.name = name;
 		memoryMap = new LinkedList<MemSegment>();
 		instList = new LinkedList<Instruction>();
+	}
+
+	public void setMemoryMap(LinkedList<MemSegment> memoryMap) {
+		this.memoryMap = memoryMap;
+	}
+
+	public void setInstList(LinkedList<Instruction> instList) {
+		this.instList = instList;
 	}
 
 	public void setSamplerate(int samplerate) {

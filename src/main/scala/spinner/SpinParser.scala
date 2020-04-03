@@ -1,5 +1,5 @@
 package spinner
-import spinner.Instruction.Instruction
+import spinner.Instruction._
 import spinner.ParserCombinator._
 
 import scala.util.matching.Regex
@@ -19,54 +19,54 @@ trait CommonParsers extends RegexParsers with Parser {
 
 trait SpinParser[F[_]] extends RegexParsers with CommonParsers {
 
-  def parsed(instructions: Instructions[F]): Parser[Instruction[F]] = {
+  def parsed(instructions: Instructions): Parser[Instruction] = {
 
-    def eof: Parser[Instruction[F]] = """^\s*$""".r ^^ (_ => instructions.EOF)
+    def eof: Parser[Instruction] = """^\s*$""".r ^^ (_ => EOF)
 
     // Instructions
     // TODO: xor, jam, nop, not
-    def rdax: Parser[(InstructionValue, InstructionValue) => instructions.Rdax] =
-      "rdax".r ^^ (_ => instructions.Rdax)
+    def rdax: Parser[(InstructionValue, InstructionValue) => Rdax] =
+      "rdax".r ^^ (_ => Rdax)
 
-    def rda: Parser[(InstructionValue, InstructionValue) => instructions.Rda] =
-      "rda".r ^^ (_ => instructions.Rda)
+    def rda: Parser[(InstructionValue, InstructionValue) => Rda] =
+      "rda".r ^^ (_ => Rda)
 
-    def wra: Parser[(InstructionValue, InstructionValue) => instructions.Wra] =
-      "wra".r ^^ (_ => instructions.Wra)
+    def wra: Parser[(InstructionValue, InstructionValue) => Wra] =
+      "wra".r ^^ (_ => Wra)
 
     def wrap = "wrap".r ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
-      case _ ~ addr ~ _ ~ scale => instructions.Wrap(addr, scale)
+      case _ ~ addr ~ _ ~ scale => Wrap(addr, scale)
     }
 
-    def wrax: Parser[(InstructionValue, InstructionValue) => instructions.Wrax] =
-      "wrax".r ^^ (_ => instructions.Wrax)
-    def sof: Parser[(InstructionValue, InstructionValue) => instructions.Sof] =
-      "sof".r ^^ (_ => instructions.Sof)
-    def exp: Parser[(InstructionValue, InstructionValue) => instructions.Exp] =
-      "exp".r ^^ (_ => instructions.Exp)
-    def rdfx: Parser[(InstructionValue, InstructionValue) => instructions.Rdfx] =
-      "rdfx".r ^^ (_ => instructions.Rdfx)
+    def wrax: Parser[(InstructionValue, InstructionValue) => Wrax] =
+      "wrax".r ^^ (_ => Wrax)
+    def sof: Parser[(InstructionValue, InstructionValue) => Sof] =
+      "sof".r ^^ (_ => Sof)
+    def exp: Parser[(InstructionValue, InstructionValue) => Exp] =
+      "exp".r ^^ (_ => Exp)
+    def rdfx: Parser[(InstructionValue, InstructionValue) => Rdfx] =
+      "rdfx".r ^^ (_ => Rdfx)
 
-    def rmpa: Parser[Instruction[F]] = "rmpa".r ~ reservedOrStringOrDouble ^^ {
-      case _ ~ lfo => instructions.Rmpa(lfo)
+    def rmpa: Parser[Instruction] = "rmpa".r ~ reservedOrStringOrDouble ^^ {
+      case _ ~ lfo => Rmpa(lfo)
     }
 
-    def maxx: Parser[(InstructionValue, InstructionValue) => instructions.Maxx] = "maxx".r ^^ (_ => instructions.Maxx)
+    def maxx: Parser[(InstructionValue, InstructionValue) => Maxx] = "maxx".r ^^ (_ => Maxx)
 
-    def log: Parser[(InstructionValue, InstructionValue) => instructions.Log] =
-      "log".r ^^ (_ => instructions.Log)
+    def log: Parser[(InstructionValue, InstructionValue) => Log] =
+      "log".r ^^ (_ => Log)
 
-    def memParser: Parser[Instruction[F]] = "mem".r ~ wordRegex ~ reservedOrStringOrDouble ^^ {
-      case _ ~ word ~ integer => instructions.Mem(word, integer)
+    def memParser: Parser[Instruction] = "mem".r ~ wordRegex ~ reservedOrStringOrDouble ^^ {
+      case _ ~ word ~ integer => Mem(word, integer)
     }
 
-    def equParser: Parser[Instruction[F]] = "equ".r ~ wordRegex ~ reservedOrStringOrDouble ^^ {
-      case _ ~ name ~ value => instructions.Equ(name, value)
+    def equParser: Parser[Instruction] = "equ".r ~ wordRegex ~ reservedOrStringOrDouble ^^ {
+      case _ ~ name ~ value => Equ(name, value)
     }
 
-    def skpParser: Parser[Instruction[F]] =
+    def skpParser: Parser[Instruction] =
       "skp".r ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
-        case _ ~ flags ~ _ ~ nSkip => instructions.Skp(flags, nSkip)
+        case _ ~ flags ~ _ ~ nSkip => Skp(flags, nSkip)
       }
 
 //    def skpParser2: Parser[Instruction[F]] =
@@ -74,65 +74,65 @@ trait SpinParser[F[_]] extends RegexParsers with CommonParsers {
 //        case _ ~ flags ~ _ ~ nSkip => instructions.Skp2(flags, nSkip)
 //      }
 
-    def mulxParser: Parser[Instruction[F]] = "mulx".r ~ reservedOrStringOrDouble ^^ {
-      case _ ~ addr => instructions.Mulx(addr)
+    def mulxParser: Parser[Instruction] = "mulx".r ~ reservedOrStringOrDouble ^^ {
+      case _ ~ addr => Mulx(addr)
     }
 
-    def wlds: Parser[(InstructionValue, InstructionValue, InstructionValue) => instructions.Wlds] =
-      "wlds".r ^^ (_ => instructions.Wlds)
+    def wlds: Parser[(InstructionValue, InstructionValue, InstructionValue) => Wlds] =
+      "wlds".r ^^ (_ => Wlds)
 
-    def wldr: Parser[(InstructionValue, InstructionValue, InstructionValue) => instructions.Wldr] =
-      "wldr".r ^^ (_ => instructions.Wldr)
+    def wldr: Parser[(InstructionValue, InstructionValue, InstructionValue) => Wldr] =
+      "wldr".r ^^ (_ => Wldr)
 
-    def wrlx: Parser[(InstructionValue, InstructionValue) => instructions.Wrlx] =
-      "wrlx".r ^^ (_ => instructions.Wrlx)
+    def wrlx: Parser[(InstructionValue, InstructionValue) => Wrlx] =
+      "wrlx".r ^^ (_ => Wrlx)
 
-    def wrhx: Parser[(InstructionValue, InstructionValue) => instructions.Wrhx] =
-      "wrhx".r ^^ (_ => instructions.Wrhx)
+    def wrhx: Parser[(InstructionValue, InstructionValue) => Wrhx] =
+      "wrhx".r ^^ (_ => Wrhx)
 
-    def andParser: Parser[Instruction[F]] = "and".r ~ reservedOrStringOrDouble ^^ {
-      case _ ~ mask => instructions.And(mask)
+    def andParser: Parser[Instruction] = "and".r ~ reservedOrStringOrDouble ^^ {
+      case _ ~ mask => And(mask)
     }
 
-    def orParser: Parser[Instruction[F]] = "or".r ~ reservedOrStringOrDouble ^^ {
-      case _ ~ mask => instructions.Or(mask)
+    def orParser: Parser[Instruction] = "or".r ~ reservedOrStringOrDouble ^^ {
+      case _ ~ mask => Instruction.Or(mask)
     }
 
-    def clr: Parser[Instruction[F]] = "clr".r ^^ (_ => instructions.Clr)
+    def clr: Parser[Instruction] = "clr".r ^^ (_ => Clr)
 
-    def absa: Parser[Instruction[F]] = "absa".r ^^ (_ => instructions.Absa)
+    def absa: Parser[Instruction] = "absa".r ^^ (_ => Absa)
 
-    def choRda: Parser[Instruction[F]] =
+    def choRda: Parser[Instruction] =
       "cho".r ~ "rda".r ~ comma ~ opt(reservedOrStringOrDouble) ~ comma ~ opt(
         reservedOrStringOrDouble
       ) ~ comma ~ reservedOrStringOrDouble ^^ {
         case _ ~ _ ~ _ ~ lfo ~ _ ~ flags ~ _ ~ addr =>
-          instructions.ChoRda(
+          ChoRda(
             lfo.getOrElse(DoubleValue(0.0)),
             flags.getOrElse(DoubleValue(0.0)),
             addr
           )
       }
 
-    def choSfo: Parser[Instruction[F]] =
+    def choSfo: Parser[Instruction] =
       "cho".r ~ "sof".r ~ comma ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
         case _ ~ _ ~ _ ~ lfo ~ _ ~ flags ~ _ ~ offset =>
-          instructions.ChoSof(lfo, flags, offset)
+          ChoSof(lfo, flags, offset)
       }
 
-    def choRdal: Parser[Instruction[F]] =
+    def choRdal: Parser[Instruction] =
       "cho".r ~ "rdal".r ~ comma ~ reservedOrStringOrDouble ^^ {
-        case _ ~ _ ~ _ ~ lfo => instructions.ChoRdal(lfo)
+        case _ ~ _ ~ _ ~ lfo => ChoRdal(lfo)
       }
 
     def choParser = choRda | choSfo | choRdal
 
-    def paramDoubleParamDouble: Parser[Instruction[F]] =
+    def paramDoubleParamDouble: Parser[Instruction] =
       (rdax | wrax | rdfx | wrhx | wrlx | sof | exp | log | rda | wra | maxx) ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
         case instruction ~ d1 ~ _ ~ d2 => instruction(d1, d2)
       }
 
-    def paramDoubleDoubleDouble: Parser[Instruction[F]] =
+    def paramDoubleDoubleDouble: Parser[Instruction] =
       (wlds | wldr) ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ~ comma ~ reservedOrStringOrDouble ^^ {
         case instruction ~ lfo ~ _ ~ freq ~ _ ~ amp =>
           instruction(lfo, freq, amp)
@@ -140,8 +140,8 @@ trait SpinParser[F[_]] extends RegexParsers with CommonParsers {
 
 //    def loopParser: Parser[Instruction[F]] = "loop".r ^^ (_ => instructions.Loop)
 
-    def loopLabel: Parser[Instruction[F]] =
-      ("endclr".r | "endset".r | "loop") ^^ instructions.SkipLabel
+    def loopLabel: Parser[Instruction] =
+      ("endclr".r | "endset".r | "loop") ^^ SkipLabel
 
     paramDoubleParamDouble | memParser | wrap | paramDoubleDoubleDouble | equParser | skpParser | clr | mulxParser | andParser | orParser | choParser | rmpa | absa | loopLabel | eof
 

@@ -2,11 +2,14 @@ package spinner
 import cats.effect.Resource
 import cats.effect.Sync
 import spinner.Instruction.Instruction
+import spinner.Instruction.SkipLabel
+import spinner.Instruction.Skp
 import org.andrewkilpatrick.elmGen.simulator.SpinSimulator
 import cats.implicits._
 import spinner.ParserCombinator.DoubleValue
 import spinner.ParserCombinator.InstructionValue
 import spinner.ParserCombinator.StringValue
+import org.andrewkilpatrick.elmGen.ElmProgram
 import org.andrewkilpatrick.elmGen.SpinProgram
 import org.andrewkilpatrick.elmGen.simulator
 
@@ -22,7 +25,7 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
   }
 
   def checkDifference(
-    instructions: List[Instruction[F]],
+    instructions: List[Instruction],
     lines: List[String]
   ): F[List[Unit]] =
     instructions
@@ -36,37 +39,52 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
       .sequence
 
   def printInstructions(
-    instructions: List[Instruction[F]],
-    program: Instructions[F]
+    instructions: List[Instruction]
   ): F[List[Unit]] =
-    calculateSkip(instructions, program).map(i => Sync[F].delay(println(i))).sequence
+    calculateSkip(instructions).map(i => Sync[F].delay(println(i))).sequence
 
-  def printRun(instructions: List[Instruction[F]], elmProgram: Instructions[F]): F[List[Unit]] =
-    calculateSkip(instructions, elmProgram).map(_.runString()).sequence
+  def printRun(instruction: List[Instruction], instructions: Instructions): F[List[Unit]] =
+    calculateSkip(instruction).map(_.runString(instructions)).sequence
 
   def calculateSkip(
-    instructions: List[Instruction[F]],
-    program: Instructions[F]
-  ): List[Instruction[F]] =
+    instructions: List[Instruction]
+  ): List[Instruction] =
     instructions.mapWithIndex {
       case (i, j) =>
         i match {
-          case program.Skp(flags, StringValue(value)) =>
+          case Skp(flags, StringValue(value)) =>
             val index = instructions.indexWhere {
-              case skipLabel: program.SkipLabel => skipLabel.label == value
-              case _                            => false
+              case skipLabel: SkipLabel => skipLabel.label == value
+              case _                    => false
             }
 
-            if (index > 0) program.Skp(flags, DoubleValue((index - j - 1).toDouble))
+            if (index > 0) Skp(flags, DoubleValue((index - j - 1).toDouble))
             else i
           case _ => i
         }
     }
 
+//  def printRun(instructions: List[Instruction], elmProgram: Instructions): F[List[Unit]] = {
+//    val x: F[List[(Instructions, Unit)]] = calculateSkip(instructions).map { i =>
+//      Instruction.updateProgram(elmProgram, i)
+//    }.sequence
+//
+//    x.flatMap(_.run)
+//  }
+
   def runInstructions(
-    instructions: List[Instruction[F]],
-    elmProgram: Instructions[F]
-  ): F[List[Unit]] = calculateSkip(instructions, elmProgram).map(_.run()).sequence
+    instructions: List[Instruction]
+  )(implicit consts: Map[String, InstructionValue]) = {
+    calculateSkip(instructions).foldLeft(Sync[F].pure(new Instructions(consts))) {
+      case (acc, curr) =>
+        for {
+          program <- acc
+          update <- Instruction.updateProgram(program, curr)
+        } yield update._1
+    }
+//    calculateSkip(instructions).map(a => Instruction.updateProgram(elmProgram, a)).sequence
+//    calculateSkip(instructions).map(a => Instruction.updateProgram(elmProgram, a)).sequence.map(a => a.head._1)
+  }
 
   def getLines(s: String): List[String] =
     s.split("\n")
@@ -101,8 +119,8 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
 
   def spinParse(
     linesWithIndex: List[(String, Int)],
-    program: Instructions[F]
-  ): F[List[Instruction[F]]] =
+    program: Instructions
+  ): F[List[Instruction]] =
     linesWithIndex
       .sortBy(_._2)
       .map(line => Sync[F].delay(parse(parsed(program), line._1)))
@@ -118,7 +136,7 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
     val acquire: F[SpinSimulator] =
       Sync[F].delay(new simulator.SpinSimulator(program, testWav, null, 0.5, 0.5, 0.5))
     val release: SpinSimulator => F[Unit] = simulator =>
-      Sync[F].delay(println("Stopping simulator")).as(simulator.stopSimulator())
+      Sync[F].delay(println("Stopping simulator")) >> Sync[F].delay(simulator.stopSimulator())
     val simulatorResource = Resource.make(acquire)(release)
 
     for {
@@ -134,12 +152,12 @@ class Program[F[_]: Sync] extends EquParser with SpinParser[F] {
       file <- fileContents(spinPath)
       lines = getLines(file).zipWithIndex
       consts <- constants(lines)
-      program = new Instructions[F](consts)
+      program = new Instructions(consts)
       parsed <- spinParse(lines, program)
       _ <- printRun(parsed, program)
       //      _ <- printInstructions(parsed.map(_._1), elm)
-      _ <- runInstructions(parsed, program)
-      _ <- checkDifference(parsed, lines.map(_._1))
-      _ <- runSimulator(program, testWav).use(s => Sync[F].delay(s.run()))
+      run <- runInstructions(parsed)(consts)
+//      _ <- checkDifference(parsed, lines.map(_._1))
+      _ <- runSimulator(run, testWav).use(s => Sync[F].delay(s.run()))
     } yield ()
 }
