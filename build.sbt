@@ -6,6 +6,8 @@ unmanagedJars in Compile += file("src/main/java/org/andrewkilpatrick/elmGen/elmG
 
 scalafmtConfig in ThisBuild := baseDirectory.value / ".scalafmt.conf"
 
+fork in run := true
+
 mainClass in (Compile, run) := Some("spinner.App")
 
 lazy val root = (project in file("."))

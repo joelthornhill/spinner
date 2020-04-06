@@ -756,6 +756,26 @@ public class SpinProgram implements Serializable {
 	}
 
 	/**
+	 * Writes the current ACC value in delay memory at addr. Then scales the ACC
+	 * by scale. Finally, adds the contents of the previous delay memory read
+	 * to the ACC.
+	 *
+	 * @param memName the delay memory segment name
+	 * @param offset the write position (0.0 to 1.0) within the memory segment
+	 * @param scale the amount to scale the ACC by after writing to the delay memory
+	 */
+	public void writeAllpass(String memName, int offset, double scale) {
+		checkCodeLen();
+		MemSegment seg = getDelayMemByName(memName);
+		if(offset < 0 || offset > seg.getLength()) {
+			throw new ElmProgramException("offset out of range: " + offset +
+					" - valid range: 0 to " + seg.getLength());
+		}
+		int addr = seg.getStart() + offset;
+		instList.add(new WriteAllpass(addr, scale));
+	}
+
+	/**
 	 * Loads one of the SIN LFOs with frequency and amplitude settings.
 	 * 
 	 * @param lfo

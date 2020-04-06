@@ -1,6 +1,7 @@
-package spinner
+package spinner.parsers
 
-import spinner.ParserCombinator._
+import spinner.model
+import spinner.model._
 
 import scala.util.parsing.combinator.RegexParsers
 
@@ -15,21 +16,21 @@ trait Parser extends RegexParsers {
   }
 
   private def singleDouble: Parser[InstructionValue] = opt("-".r) ~ (doubleParser | intParser) ^^ {
-    case Some(_) ~ double => WithArithmetic(Minus(DoubleValue(double)))
+    case Some(_) ~ double => WithArithmetic(model.Minus(DoubleValue(double)))
     case None ~ double    => DoubleValue(double)
   }
 
   def doubleWithDivision: Parser[InstructionValue] =
     singleDouble ~ "/".r ~ opt(singleDouble) ~ opt(singleWord) ^^ {
       case double ~ _ ~ Some(divideBy) ~ None => WithArithmetic(Division(double, divideBy))
-      case double ~ _ ~ None ~ Some(divideBy) => WithArithmetic(Division(double, divideBy))
+      case double ~ _ ~ None ~ Some(divideBy) => WithArithmetic(model.Division(double, divideBy))
       case double ~ _ ~ _ ~ _                 => double
     }
 
   def doubleWithAddition: Parser[InstructionValue] =
     singleDouble ~ "\\+".r ~ opt(singleDouble) ~ opt(singleWord) ^^ {
       case double ~ _ ~ Some(add) ~ None => WithArithmetic(Addition(double, add))
-      case double ~ _ ~ None ~ Some(add) => WithArithmetic(Addition(double, add))
+      case double ~ _ ~ None ~ Some(add) => WithArithmetic(model.Addition(double, add))
       case double ~ _ ~ _ ~ _            => double
     }
 
@@ -38,29 +39,31 @@ trait Parser extends RegexParsers {
       case double ~ _ ~ Some(multiplier) ~ None =>
         WithArithmetic(Multiplication(double, multiplier))
       case double ~ _ ~ None ~ Some(multiplier) =>
-        WithArithmetic(Multiplication(double, multiplier))
+        WithArithmetic(model.Multiplication(double, multiplier))
       case double ~ _ ~ _ ~ _ => double
     }
 
   def wordWithDivision: Parser[InstructionValue] =
     singleWord ~ "/".r ~ opt(singleDouble) ~ opt(singleWord) ^^ {
-      case word ~ _ ~ Some(divideBy) ~ None => WithArithmetic(Division(word, divideBy))
-      case word ~ _ ~ None ~ Some(divideBy) => WithArithmetic(Division(word, divideBy))
+      case word ~ _ ~ Some(divideBy) ~ None => WithArithmetic(model.Division(word, divideBy))
+      case word ~ _ ~ None ~ Some(divideBy) => WithArithmetic(model.Division(word, divideBy))
       case word ~ _ ~ _ ~ _                 => word
     }
 
   def wordWithAddition: Parser[InstructionValue] =
     singleWord ~ "\\+".r ~ opt(singleDouble) ~ opt(singleWord) ^^ {
-      case word ~ _ ~ Some(add) ~ None => WithArithmetic(Addition(word, add))
-      case word ~ _ ~ None ~ Some(add) => WithArithmetic(Addition(word, add))
+      case word ~ _ ~ Some(add) ~ None => WithArithmetic(model.Addition(word, add))
+      case word ~ _ ~ None ~ Some(add) => WithArithmetic(model.Addition(word, add))
       case word ~ _ ~ _ ~ _            => word
     }
 
   def wordWithMultiplication: Parser[InstructionValue] =
     singleWord ~ "\\*".r ~ opt(singleDouble) ~ opt(singleWord) ^^ {
-      case word ~ _ ~ Some(multiplier) ~ None => WithArithmetic(Multiplication(word, multiplier))
-      case word ~ _ ~ None ~ Some(multiplier) => WithArithmetic(Multiplication(word, multiplier))
-      case word ~ _ ~ _ ~ _                   => word
+      case word ~ _ ~ Some(multiplier) ~ None =>
+        WithArithmetic(model.Multiplication(word, multiplier))
+      case word ~ _ ~ None ~ Some(multiplier) =>
+        WithArithmetic(model.Multiplication(word, multiplier))
+      case word ~ _ ~ _ ~ _ => word
     }
 
   def wordWithHash: Parser[InstructionValue] =

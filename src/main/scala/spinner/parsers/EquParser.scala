@@ -1,8 +1,8 @@
-package spinner
+package spinner.parsers
 
-import spinner.ParserCombinator.InstructionValue
+import spinner.model.InstructionValue
 
-import scala.util.parsing.combinator._
+import scala.util.parsing.combinator.RegexParsers
 
 trait EquParser extends RegexParsers with Parser {
   private val wordRegex = """[a-zA-Z0-9#_]+""".r
