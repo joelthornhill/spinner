@@ -393,7 +393,7 @@ case class Log(scale: InstructionValue, offset: InstructionValue) extends Instru
   override def toString: String = s"log($scale, $offset)"
   override def spinInstruction(): String = s"log ${scale.spinString},${offset.spinString}"
 }
-//
+
 case class And(mask: InstructionValue) extends Instruction {
   def run[F[_]: Sync](spin: Spin): F[Unit] =
     runner(mask, spin.and)(spin.consts)
@@ -425,4 +425,11 @@ case class Jam(lfo: InstructionValue) extends Instruction {
   def runString[F[_]: Sync](spin: Spin) = runner(lfo, i => println(s"jam($i)"))(spin.consts)
 
   override def spinInstruction(): String = s"jam ${lfo.spinString}"
+}
+
+case object Not extends Instruction {
+  def run[F[_]: Sync](spin: Spin): F[Unit] = Sync[F].delay(spin.not())
+  override def runString[F[_]: Sync](spin: Spin): F[Unit] = Sync[F].delay(println("not()"))
+
+  override def spinInstruction(): String = "not"
 }

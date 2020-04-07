@@ -10,8 +10,6 @@ trait SpinParser extends RegexParsers with CommonParser {
 
   private def eof: Parser[Instruction] = """^\s*$""".r ^^ (_ => EOF)
 
-  // Instructions
-  // TODO: xor, jam, nop, not
   private def rdax: Parser[(InstructionValue, InstructionValue) => Rdax] =
     "rdax" ^^ (_ => Rdax)
 
@@ -24,7 +22,6 @@ trait SpinParser extends RegexParsers with CommonParser {
   private def wrap = "wrap" ~ StringOrDouble ~ comma ~ StringOrDouble ^^ {
     case _ ~ addr ~ _ ~ scale => Wrap(addr, scale)
   }
-//    def wrap: Parser[(InstructionValue, InstructionValue) => Wrap] = "wrap".r ^^ (_ => Wrap)
 
   private def wrax: Parser[(InstructionValue, InstructionValue) => Wrax] =
     "wrax" ^^ (_ => Wrax)
@@ -57,11 +54,6 @@ trait SpinParser extends RegexParsers with CommonParser {
 
   private def ldax: Parser[InstructionValue => Ldax] = "ldax" ^^ (_ => Ldax)
 
-//    def skpParser2: Parser[Instruction[F]] =
-//      "skp".r ~ reservedOrStringOrDouble ~ comma ~ wordRegex ^^ {
-//        case _ ~ flags ~ _ ~ nSkip => instructions.Skp2(flags, nSkip)
-//      }
-
   private def mulxParser: Parser[InstructionValue => Mulx] = "mulx" ^^ (_ => Mulx)
 
   private def wlds: Parser[(InstructionValue, InstructionValue, InstructionValue) => Wlds] =
@@ -85,6 +77,10 @@ trait SpinParser extends RegexParsers with CommonParser {
   private def absa: Parser[Instruction] = "absa" ^^ (_ => Absa)
 
   private def jam: Parser[InstructionValue => Instruction] = "jam" ^^ (_ => Jam)
+
+  private def xor: Parser[InstructionValue => Instruction] = "xor" ^^ (_ => Xor)
+
+  private def not: Parser[Instruction] = "not" ^^ (_ => Not)
 
   private def choRda: Parser[Instruction] =
     "cho" ~ "rda" ~ comma ~ opt(StringOrDouble) ~ comma ~ opt(
@@ -123,11 +119,9 @@ trait SpinParser extends RegexParsers with CommonParser {
     }
 
   private def singleParser: Parser[Instruction] =
-    (orParser | and | mulxParser | ldax | rmpa | jam) ~ StringOrDouble ^^ {
+    (orParser | and | mulxParser | ldax | rmpa | jam | xor) ~ StringOrDouble ^^ {
       case instruction ~ value => instruction(value)
     }
-
-//    def loopParser: Parser[Instruction[F]] = "loop".r ^^ (_ => instructions.Loop)
 
   private def loopLabel: Parser[Instruction] =
     wordRegex ~ ":" ^^ {
@@ -135,6 +129,6 @@ trait SpinParser extends RegexParsers with CommonParser {
     }
 
   def parsed: Parser[Instruction] =
-    paramDoubleParamDouble | singleParser | memParser | wrap | paramDoubleDoubleDouble | equParser | skpParser | clr | choParser | absa | loopLabel | eof
+    paramDoubleParamDouble | singleParser | memParser | wrap | paramDoubleDoubleDouble | equParser | skpParser | clr | choParser | absa | not | loopLabel | eof
 
 }

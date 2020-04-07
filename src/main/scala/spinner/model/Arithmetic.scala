@@ -28,3 +28,7 @@ case class Or(value: List[InstructionValue]) extends Arithmetic {
 case class Binary(value: StringValue) extends Arithmetic {
   override def spinString: String = s"%${value.spinString}"
 }
+
+case class Hex(value: StringValue) extends Arithmetic {
+  override def spinString: String = "$" + value.spinString
+}

@@ -92,6 +92,11 @@ trait Parser extends RegexParsers {
       case _ ~ value => WithArithmetic(Binary(StringValue(value)))
     }
 
+  def hexWord: Parser[InstructionValue] =
+    "$" ~ "[0-9a-fA-F]+".r ^^ {
+      case _ ~ value => WithArithmetic(Hex(StringValue(value)))
+    }
+
   def word: Parser[InstructionValue] =
     orWord | wordWithDivision | wordWithAddition | wordWithMultiplication | wordWithHash | wordWithCarat | binaryWord | singleWord
 

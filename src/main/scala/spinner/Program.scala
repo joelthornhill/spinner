@@ -98,22 +98,24 @@ class Program[F[_]: Sync] extends EquParser with SpinParser {
         )
     }
 
-  private def constants(linesWithIndex: List[(String, Int)]): F[Map[String, InstructionValue]] = {
+  private def parseLines[T](
+    linesWithIndex: List[(String, Int)],
+    parser: Parser[T]
+  ): F[List[ParseResult[T]]] =
     linesWithIndex
       .sortBy(_._2)
-      .map(line => Sync[F].delay(parse(equParser, line._1)))
+      .map(line => Sync[F].delay(parse(parser, line._1)))
       .sequence
+
+  private def constants(linesWithIndex: List[(String, Int)]): F[Map[String, InstructionValue]] =
+    parseLines(linesWithIndex, equParser)
       .flatMap(_.mapWithIndex { case (r, i) => handleResult(r, i, linesWithIndex) }.sequence)
       .map(_.flatten.toMap)
-  }
 
   private def spinParse(
     linesWithIndex: List[(String, Int)]
   ): F[List[Instruction]] =
-    linesWithIndex
-      .sortBy(_._2)
-      .map(line => Sync[F].delay(parse(parsed, line._1)))
-      .sequence
+    parseLines(linesWithIndex, parsed)
       .flatMap(_.mapWithIndex { case (r, i) => handleResult(r, i, linesWithIndex) }.sequence)
 
   private def fileContents(filePath: String): F[String] =
