@@ -37,10 +37,10 @@ class Program[F[_]: Sync] extends EquParser with SpinParser {
       }
       .sequence
 
-//  private def printInstructions(
-//    instructions: List[Instruction]
-//  ): F[List[Unit]] =
-//    calculateSkip(instructions).map(i => Sync[F].delay(println(i))).sequence
+  private def printInstructions(
+    instructions: List[Instruction]
+  ): F[List[Unit]] =
+    calculateSkip(instructions).map(i => Sync[F].delay(println(i))).sequence
 
   private def printRun(instruction: List[Instruction], instructions: Spin): F[List[Unit]] =
     calculateSkip(instruction).map(_.runString(instructions)).sequence
@@ -57,7 +57,7 @@ class Program[F[_]: Sync] extends EquParser with SpinParser {
               case _                    => false
             }
 
-            if (index > 0) Skp(flags, DoubleValue((index - j - 1).toDouble))
+            if (index > 0) Skp(flags, DoubleValue((index - j).toDouble))
             else i
           case _ => i
         }
@@ -81,6 +81,7 @@ class Program[F[_]: Sync] extends EquParser with SpinParser {
       .map(removeComment)
       .filterNot(_.startsWith(";"))
       .filterNot(_.isEmpty)
+      .map(_.toLowerCase())
 
   private def handleResult[T](
     parseResult: ParseResult[T],
@@ -143,7 +144,7 @@ class Program[F[_]: Sync] extends EquParser with SpinParser {
       program = new Spin(consts)
       parsed <- spinParse(lines)
       _ <- printRun(parsed, program)
-      //      _ <- printInstructions(parsed.map(_._1), elm)
+      _ <- printInstructions(parsed)
       run <- runInstructions(parsed)(consts)
       _ <- checkDifference(parsed, lines.map(_._1))
       _ <- runSimulator(run, testWav).use(s => Sync[F].delay(s.run()))

@@ -84,6 +84,8 @@ trait SpinParser extends RegexParsers with CommonParser {
 
   private def absa: Parser[Instruction] = "absa" ^^ (_ => Absa)
 
+  private def jam: Parser[InstructionValue => Instruction] = "jam" ^^ (_ => Jam)
+
   private def choRda: Parser[Instruction] =
     "cho" ~ "rda" ~ comma ~ opt(StringOrDouble) ~ comma ~ opt(
       StringOrDouble
@@ -121,7 +123,7 @@ trait SpinParser extends RegexParsers with CommonParser {
     }
 
   private def singleParser: Parser[Instruction] =
-    (orParser | and | mulxParser | ldax | rmpa) ~ StringOrDouble ^^ {
+    (orParser | and | mulxParser | ldax | rmpa | jam) ~ StringOrDouble ^^ {
       case instruction ~ value => instruction(value)
     }
 

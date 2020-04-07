@@ -419,3 +419,10 @@ case object Loop extends Instruction {
 
   override def spinInstruction(): String = s"loop"
 }
+
+case class Jam(lfo: InstructionValue) extends Instruction {
+  def run[F[_]: Sync](spin: Spin) = runner(lfo, spin.jam)(spin.consts)
+  def runString[F[_]: Sync](spin: Spin) = runner(lfo, i => println(s"jam($i)"))(spin.consts)
+
+  override def spinInstruction(): String = s"jam ${lfo.spinString}"
+}

@@ -175,6 +175,8 @@ object Helpers {
       case DelayEnd(_) => Sync[F].raiseError(new Exception("Delay end should be handled elsewhere"))
       case MidpointDelay(_) =>
         Sync[F].raiseError(new Exception("Midpoint should be handled elsewhere"))
+      case Binary(s) =>
+        Sync[F].catchNonFatal(Integer.parseInt(s.value.replaceAll("_", ""), 2).toDouble)
       case Or(value) =>
         value.foldLeft(Sync[F].pure(0.0)) {
           case (acc, b) =>

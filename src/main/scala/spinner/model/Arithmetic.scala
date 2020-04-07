@@ -24,3 +24,7 @@ case class MidpointDelay(value: InstructionValue) extends Arithmetic {
 case class Or(value: List[InstructionValue]) extends Arithmetic {
   override def spinString: String = s"${value.map(_.spinString).mkString("|")}"
 }
+
+case class Binary(value: StringValue) extends Arithmetic {
+  override def spinString: String = s"%${value.spinString}"
+}

@@ -87,8 +87,13 @@ trait Parser extends RegexParsers {
       WithArithmetic(Or(word.split("\\|").toList.map(a => StringValue(a.trim))))
     }
 
+  def binaryWord: Parser[InstructionValue] =
+    "%" ~ "[0-9_]+".r ^^ {
+      case _ ~ value => WithArithmetic(Binary(StringValue(value)))
+    }
+
   def word: Parser[InstructionValue] =
-    orWord | wordWithDivision | wordWithAddition | wordWithMultiplication | wordWithHash | singleWord
+    orWord | wordWithDivision | wordWithAddition | wordWithMultiplication | wordWithHash | wordWithCarat | binaryWord | singleWord
 
   def double: Parser[InstructionValue] =
     doubleWithDivision | doubleWithAddition | doubleWithMultiplication | singleDouble
