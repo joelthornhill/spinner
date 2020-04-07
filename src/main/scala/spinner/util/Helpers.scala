@@ -1,5 +1,6 @@
 package spinner.util
 
+import cats.data.StateT
 import cats.effect.Sync
 import spinner.model._
 import spinner.Instruction
@@ -10,13 +11,10 @@ import cats.syntax.flatMap._
 import cats.syntax.applicativeError._
 
 object Helpers {
-
   def updateProgram[F[_]: Sync](
-    spin: Spin,
     instruction: Instruction
-  ): F[(Spin, Unit)] = {
-    val newInstructions =
-      Spin.copy(spin.memoryMap, spin.instList, spin.consts)
+  ): StateT[F, Spin, Unit] = StateT[F, Spin, Unit] { s =>
+    val newInstructions = Spin.copy(s.memoryMap, s.instList, s.consts)
     instruction.run(newInstructions).map((newInstructions, _))
   }
 

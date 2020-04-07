@@ -69,9 +69,9 @@ class Program[F[_]: Sync] extends EquParser with SpinParser {
     calculateSkip(instructions).foldLeft(Sync[F].pure(new Spin(consts))) {
       case (acc, curr) =>
         for {
-          program <- acc
-          update <- Helpers.updateProgram(program, curr)
-        } yield update._1
+          update <- Helpers.updateProgram(curr).runF
+          program <- acc.flatMap(update)
+        } yield program._1
     }
   }
 
