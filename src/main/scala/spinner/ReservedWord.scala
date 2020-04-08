@@ -215,8 +215,4 @@ object ReservedWord extends Enum[ReservedWord] {
   case object NA extends ReservedWord {
     val value = 32
   }
-
-  case object LOOP extends ReservedWord {
-    val value = 1
-  }
 }

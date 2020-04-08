@@ -819,6 +819,9 @@ public class SpinProgram implements Serializable {
 	 */
 	public void loadRampLFO(int lfo, int freq, int amp) {
 		//checkCodeLen();
+		if (lfo >= 2) {
+			lfo = lfo - 2;
+		}
 		incrementLFOUsed(RMP0 + lfo);
 		instList.add(new LoadRampLFO(lfo, freq, amp));
 	}
@@ -831,6 +834,9 @@ public class SpinProgram implements Serializable {
 	 */
 	public void jam(int lfo) {
 		//checkCodeLen();
+		if (lfo >= 2) {
+			lfo = lfo - 2;
+		}
 		instList.add(new Jam(lfo));
 	}
 

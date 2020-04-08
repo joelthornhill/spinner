@@ -264,6 +264,7 @@ case class Wldr(lfo: InstructionValue, freq: InstructionValue, amp: InstructionV
     runner(lfo, freq, amp, (i1, i2, i3) => println(s"loadRampLFO($i1, $i2, $i3)"))(
       spin.consts
     )
+
   override def toString: String = s"loadRampLFO($lfo, $freq, $amp)"
   override def spinInstruction(): String =
     s"wldr ${lfo.spinString},${freq.spinString},${amp.spinString}"
@@ -280,6 +281,8 @@ case class ChoRda(lfo: InstructionValue, flags: InstructionValue, addr: Instruct
       run <- addr match {
         case WithArithmetic(Addition(StringValue(value), DoubleValue(offset))) =>
           Sync[F].delay(spin.chorusReadDelay(lfo, flags, value, offset.toInt))
+        case StringValue(value) =>
+          Sync[F].delay(spin.chorusReadDelay(lfo, flags, value, 0))
         case _ =>
           getInt(addr)(spin.consts).flatMap(addr =>
             Sync[F].delay(spin.chorusReadDelay(lfo, flags, addr))
@@ -294,6 +297,8 @@ case class ChoRda(lfo: InstructionValue, flags: InstructionValue, addr: Instruct
       run <- addr match {
         case WithArithmetic(Addition(StringValue(value), DoubleValue(offset))) =>
           Sync[F].delay(println(s"chorusReadDelay($lfo, $flags, $value, ${offset.toInt})"))
+        case StringValue(value) =>
+          Sync[F].delay(println(s"chorusReadDelay($lfo, $flags, $value, 0)"))
         case _ =>
           getInt(addr)(spin.consts).flatMap(addr =>
             Sync[F].delay(println(s"chorusReadDelay($lfo, $flags, $addr)"))
