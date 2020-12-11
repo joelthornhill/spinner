@@ -3,109 +3,126 @@ package spinner.util
 import cats.data.StateT
 import cats.effect.Sync
 import spinner.model._
+import spinner.Addr
+import spinner.Amp
+import spinner.Flags
+import spinner.Freq
 import spinner.Instruction
+import spinner.Lfo
+import spinner.Mask
+import spinner.Offset
 import spinner.ReservedWord
+import spinner.Scale
 import spinner.Spin
 import cats.syntax.functor._
 import cats.syntax.flatMap._
 import cats.syntax.applicativeError._
 
 object Helpers {
-  def updateProgram[F[_]: Sync](
-    instruction: Instruction
-  ): StateT[F, Spin, Unit] = StateT[F, Spin, Unit] { s =>
+
+  case class SpinError(msg: String) extends Throwable
+
+  def updateProgram[F[_]](
+    instruction: Instruction[F]
+  )(implicit M: Sync[F]): StateT[F, Spin, Unit] = StateT[F, Spin, Unit] { s =>
     val newInstructions = Spin.copy(s.memoryMap, s.instList, s.consts)
     instruction.run(newInstructions).map((newInstructions, _))
   }
 
-  def runnerID[F[_]: Sync](
-    addr: InstructionValue,
-    scale: InstructionValue,
+  def runner[F[_]](
+    addr: Addr,
+    scale: Scale,
     f: (Int, Double) => Unit
-  )(consts: Map[String, InstructionValue]): F[Unit] = {
+  )(consts: Map[String, InstructionValue])(implicit M: Sync[F]): F[Unit] =
     for {
-      addr <- getInt(addr)(consts)
-      scale <- getDouble(scale, consts)
-      run <- Sync[F].delay(f(addr, scale))
-    } yield run
-  }
+      addr <- getInt(addr.value)(consts)
+      scale <- getDouble(scale.value, consts)
+    } yield f(addr, scale)
 
   def runner[F[_]: Sync](
-    lfo: InstructionValue,
-    freq: InstructionValue,
-    amp: InstructionValue,
+    lfo: Lfo,
+    freq: Freq,
+    amp: Amp,
     f: (Int, Int, Int) => Unit
-  )(consts: Map[String, InstructionValue]) = {
+  )(consts: Map[String, InstructionValue]): F[Unit] = {
     for {
-      lfo <- getInt(lfo)(consts)
-      freq <- getInt(freq)(consts)
-      amp <- getInt(amp)(consts)
+      lfo <- getInt(lfo.value)(consts)
+      freq <- getInt(freq.value)(consts)
+      amp <- getInt(amp.value)(consts)
       run <- Sync[F].delay(f(lfo, freq, amp))
     } yield run
   }
 
   def runner[F[_]: Sync](
-    value: InstructionValue,
+    value: Addr,
     f: Int => Unit
-  )(consts: Map[String, InstructionValue]) = {
-    for {
-      value <- getInt(value)(consts)
-      run <- Sync[F].delay(f(value))
-    } yield run
-  }
+  )(consts: Map[String, InstructionValue]) =
+    getInt(value.value)(consts).map(f(_))
 
-  def runnerDD[F[_]: Sync](
-    scale: InstructionValue,
-    offset: InstructionValue,
+  def runner[F[_]: Sync](
+    value: Mask,
+    f: Int => Unit
+  )(consts: Map[String, InstructionValue]) =
+    getInt(value.value)(consts).map(f(_))
+
+  def runner[F[_]: Sync](
+    value: Lfo,
+    f: Int => Unit
+  )(consts: Map[String, InstructionValue]) =
+    getInt(value.value)(consts).map(f(_))
+
+  def runner[F[_]: Sync](
+    scale: Scale,
+    offset: Offset,
     f: (Double, Double) => Unit
   )(consts: Map[String, InstructionValue]) =
     for {
-      scale <- getDouble(scale, consts)
-      offset <- getDouble(offset, consts)
+      scale <- getDouble(scale.value, consts)
+      offset <- getDouble(offset.value, consts)
       run <- Sync[F].delay(f(scale, offset))
     } yield run
 
-  def runnerIID[F[_]: Sync](
-    lfo: InstructionValue,
-    flags: InstructionValue,
-    offset: InstructionValue,
+  def runner[F[_]: Sync](
+    lfo: Lfo,
+    flags: Flags,
+    offset: Offset,
     f: (Int, Int, Double) => Unit
   )(consts: Map[String, InstructionValue]) =
     for {
-      lfo <- getInt(lfo)(consts)
-      flags <- getInt(flags)(consts)
-      offset <- getDouble(offset, consts)
+      lfo <- getInt(lfo.value)(consts)
+      flags <- getInt(flags.value)(consts)
+      offset <- getDouble(offset.value, consts)
       run <- Sync[F].delay(f(lfo, flags, offset))
     } yield run
 
   def findInReserved[F[_]: Sync](s: String): F[Double] =
     Sync[F].catchNonFatal(ReservedWord.withName(s.toUpperCase).value.toDouble)
 
-  def findInConsts[F[_]: Sync](
+  def findInConsts[F[_]](
     s: String,
     getDouble: InstructionValue => F[Double]
-  )(consts: Map[String, InstructionValue]): F[Double] = {
-    Sync[F].pure(consts.get(s)).flatMap {
+  )(consts: Map[String, InstructionValue])(implicit M: Sync[F]): F[Double] = {
+    M.pure(consts.get(s)).flatMap {
       case Some(StringValue(value)) =>
         findInReserved(value).attempt.flatMap {
-          case Right(const) => Sync[F].pure(const)
+          case Right(const) => M.pure(const)
           case Left(_) =>
-            Sync[F].pure(consts.get(value)).flatMap {
+            M.pure(consts.get(value)).flatMap {
               case Some(StringValue(stringValue)) =>
                 findInReserved(stringValue).attempt flatMap {
-                  case Right(v) => Sync[F].pure(v)
+                  case Right(v) => M.pure(v)
                   case _ =>
-                    Sync[F].raiseError(new Exception(s"Could not find: $stringValue in consts"))
+                    M.raiseError(SpinError(s"Could not find: $stringValue in consts"))
                 }
-              case Some(DoubleValue(doubleValue)) => Sync[F].pure(doubleValue)
+              case Some(DoubleValue(doubleValue)) => M.pure(doubleValue)
               case Some(WithArithmetic(withArithmetic)) =>
                 calculateArithmetic(withArithmetic, getDouble)
-              case _ => Sync[F].raiseError(new Exception(s"Could not find $value in consts"))
+              case _ => M.raiseError(SpinError(s"Could not find $value in consts"))
             }
         }
-      case Some(DoubleValue(value))    => Sync[F].pure(value)
+      case Some(DoubleValue(value))    => M.pure(value)
       case Some(WithArithmetic(value)) => calculateArithmetic(value, getDouble)
-      case None                        => Sync[F].raiseError(new Exception(s"Could not find: $s in consts"))
+      case None                        => M.raiseError(SpinError(s"Could not find: $s in consts"))
     }
   }
 
@@ -127,32 +144,32 @@ object Helpers {
       case WithArithmetic(value) => calculateArithmetic(value, getDouble(_, consts))
     }
 
-  def handleAllOffsets[F[_]: Sync](
-    addr: InstructionValue,
-    scale: InstructionValue,
+  def handleAllOffsets[F[_]](
+    addr: Addr,
+    scale: Scale,
     f: (String, Double, Double) => Unit,
     f2: (String, Int, Double) => Unit,
     f3: (Int, Double) => Unit
-  )(consts: Map[String, InstructionValue]) =
+  )(consts: Map[String, InstructionValue])(implicit M: Sync[F]) =
     for {
-      scale <- getDouble(scale, consts)
-      run <- addr match {
+      scale <- getDouble(scale.value, consts)
+      run <- addr.value match {
         case WithArithmetic(DelayEnd(StringValue(value))) =>
-          Sync[F].delay(f(value, 1.0, scale))
+          M.delay(f(value, 1.0, scale))
         case WithArithmetic(MidpointDelay(StringValue(value))) =>
-          Sync[F].delay(f(value, 0.5, scale))
+          M.delay(f(value, 0.5, scale))
         case WithArithmetic(Addition(StringValue(value), DoubleValue(offset))) =>
-          Sync[F].delay(f2(value, offset.toInt, scale))
+          M.delay(f2(value, offset.toInt, scale))
         case StringValue(value) =>
-          Sync[F].delay(f(value, 0.0, scale))
-        case _ => runnerID(addr, DoubleValue(scale), f3)(consts)
+          M.delay(f(value, 0.0, scale))
+        case _ => getInt(addr.value)(consts).map(f3(_, scale))
       }
     } yield run
 
-  def calculateArithmetic[F[_]: Sync](
+  def calculateArithmetic[F[_]](
     arithmetic: Arithmetic,
     getDouble: InstructionValue => F[Double]
-  ): F[Double] = {
+  )(implicit M: Sync[F]): F[Double] = {
     arithmetic match {
       case Division(a, b) =>
         for {
@@ -170,15 +187,15 @@ object Helpers {
           a <- getDouble(a)
           b <- getDouble(b)
         } yield a * b
-      case DelayEnd(_) => Sync[F].raiseError(new Exception("Delay end should be handled elsewhere"))
+      case DelayEnd(_) => M.raiseError(SpinError("Delay end should be handled elsewhere"))
       case MidpointDelay(_) =>
-        Sync[F].raiseError(new Exception("Midpoint should be handled elsewhere"))
+        M.raiseError(SpinError("Midpoint should be handled elsewhere"))
       case Binary(s) =>
-        Sync[F].catchNonFatal(Integer.parseInt(s.value.replaceAll("_", ""), 2).toDouble)
+        M.catchNonFatal(Integer.parseInt(s.value.replaceAll("_", ""), 2).toDouble)
       case Hex(s) =>
-        Sync[F].catchNonFatal(Integer.parseInt(s.value, 16).toDouble)
+        M.catchNonFatal(Integer.parseInt(s.value, 16).toDouble)
       case Or(value) =>
-        value.foldLeft(Sync[F].pure(0.0)) {
+        value.foldLeft(M.pure(0.0)) {
           case (acc, b) =>
             for {
               left <- acc

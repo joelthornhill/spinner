@@ -1,134 +1,155 @@
 package spinner.parsers
 
+import cats.effect.Sync
 import spinner.model.DoubleValue
-import spinner.model.InstructionValue
 import spinner._
 
 import scala.util.parsing.combinator.RegexParsers
 
-trait SpinParser extends RegexParsers with CommonParser {
+class SpinParser[F[_]: Sync] extends RegexParsers with CommonParser {
 
-  private def eof: Parser[Instruction] = """^\s*$""".r ^^ (_ => EOF)
+  private def eof: Parser[Instruction[F]] = """^\s*$""".r ^^ (_ => EOF[F])
 
-  private def rdax: Parser[(InstructionValue, InstructionValue) => Rdax] =
-    "rdax" ^^ (_ => Rdax)
+  private def rdax: Parser[(Addr, Scale) => Rdax[F]] =
+    "rdax" ^^ (_ => Rdax[F])
 
-  private def rda: Parser[(InstructionValue, InstructionValue) => Rda] =
-    "rda" ^^ (_ => Rda)
+  private def rda: Parser[(Addr, Scale) => Rda[F]] =
+    "rda" ^^ (_ => Rda[F])
 
-  private def wra: Parser[(InstructionValue, InstructionValue) => Wra] =
-    "wra" ^^ (_ => Wra)
+  private def wra: Parser[(Addr, Scale) => Wra[F]] =
+    "wra" ^^ (_ => Wra[F])
 
-  private def wrap = "wrap" ~ StringOrDouble ~ comma ~ StringOrDouble ^^ {
-    case _ ~ addr ~ _ ~ scale => Wrap(addr, scale)
+  private def wrap: Parser[Instruction[F]] = "wrap" ~ StringOrDouble ~ comma ~ StringOrDouble ^^ {
+    case _ ~ addr ~ _ ~ scale => Wrap(Addr(addr), Scale(scale))
+  }
+  private def wrax: Parser[(Addr, Scale) => Wrax[F]] =
+    "wrax" ^^ (_ => Wrax[F])
+  private def sof: Parser[(Scale, Offset) => Sof[F]] =
+    "sof" ^^ (_ => Sof[F])
+  private def exp: Parser[(Scale, Offset) => Exp[F]] =
+    "exp" ^^ (_ => Exp[F])
+  private def rdfx: Parser[(Addr, Scale) => Rdfx[F]] =
+    "rdfx" ^^ (_ => Rdfx[F])
+
+  private def rmpa: Parser[Scale => Instruction[F]] = "rmpa" ^^ (_ => Rmpa[F])
+
+  private def maxx: Parser[(Addr, Scale) => Maxx[F]] =
+    "maxx" ^^ (_ => Maxx[F])
+
+  private def log: Parser[(Scale, Offset) => Log[F]] =
+    "log" ^^ (_ => Log[F])
+
+  private def memParser: Parser[Instruction[F]] = "mem" ~ wordRegex ~ StringOrDouble ^^ {
+    case _ ~ word ~ integer => Mem(word, EquValue(integer))
   }
 
-  private def wrax: Parser[(InstructionValue, InstructionValue) => Wrax] =
-    "wrax" ^^ (_ => Wrax)
-  private def sof: Parser[(InstructionValue, InstructionValue) => Sof] =
-    "sof" ^^ (_ => Sof)
-  private def exp: Parser[(InstructionValue, InstructionValue) => Exp] =
-    "exp" ^^ (_ => Exp)
-  private def rdfx: Parser[(InstructionValue, InstructionValue) => Rdfx] =
-    "rdfx" ^^ (_ => Rdfx)
-
-  private def rmpa: Parser[InstructionValue => Rmpa] = "rmpa" ^^ (_ => Rmpa)
-
-  private def maxx: Parser[(InstructionValue, InstructionValue) => Maxx] = "maxx" ^^ (_ => Maxx)
-
-  private def log: Parser[(InstructionValue, InstructionValue) => Log] =
-    "log" ^^ (_ => Log)
-
-  private def memParser: Parser[Instruction] = "mem" ~ wordRegex ~ StringOrDouble ^^ {
-    case _ ~ word ~ integer => Mem(word, integer)
+  private def equParser: Parser[Instruction[F]] = "equ" ~ wordRegex ~ StringOrDouble ^^ {
+    case _ ~ name ~ value => Equ(name, EquValue(value))
   }
 
-  private def equParser: Parser[Instruction] = "equ" ~ wordRegex ~ StringOrDouble ^^ {
-    case _ ~ name ~ value => Equ(name, value)
-  }
-
-  private def skpParser: Parser[Instruction] =
+  private def skpParser: Parser[Instruction[F]] =
     "skp" ~ StringOrDouble ~ comma ~ StringOrDouble ^^ {
-      case _ ~ flags ~ _ ~ nSkip => Skp(flags, nSkip)
+      case _ ~ flags ~ _ ~ nSkip => Skp(Flags(flags), NSkip(nSkip))
     }
 
-  private def ldax: Parser[InstructionValue => Ldax] = "ldax" ^^ (_ => Ldax)
+  private def ldax: Parser[Addr => Ldax[F]] = "ldax" ^^ (_ => Ldax[F])
 
-  private def mulxParser: Parser[InstructionValue => Mulx] = "mulx" ^^ (_ => Mulx)
+  private def mulxParser: Parser[Addr => Mulx[F]] = "mulx" ^^ (_ => Mulx[F])
 
-  private def wlds: Parser[(InstructionValue, InstructionValue, InstructionValue) => Wlds] =
-    "wlds" ^^ (_ => Wlds)
+  private def wlds: Parser[(Lfo, Freq, Amp) => Wlds[F]] =
+    "wlds" ^^ (_ => Wlds[F])
 
-  private def wldr: Parser[(InstructionValue, InstructionValue, InstructionValue) => Wldr] =
-    "wldr" ^^ (_ => Wldr)
+  private def wldr: Parser[(Lfo, Freq, Amp) => Wldr[F]] =
+    "wldr" ^^ (_ => Wldr[F])
 
-  private def wrlx: Parser[(InstructionValue, InstructionValue) => Wrlx] =
-    "wrlx" ^^ (_ => Wrlx)
+  private def wrlx: Parser[(Addr, Scale) => Wrlx[F]] =
+    "wrlx" ^^ (_ => Wrlx[F])
 
-  private def wrhx: Parser[(InstructionValue, InstructionValue) => Wrhx] =
-    "wrhx".r ^^ (_ => Wrhx)
+  private def wrhx: Parser[(Addr, Scale) => Wrhx[F]] =
+    "wrhx".r ^^ (_ => Wrhx[F])
 
-  private def and: Parser[InstructionValue => And] = "and" ^^ (_ => And)
+  private def and: Parser[Mask => And[F]] = "and" ^^ (_ => And[F])
 
-  private def orParser: Parser[InstructionValue => OrInst] = "or" ^^ (_ => OrInst)
+  private def orParser: Parser[Mask => OrInst[F]] = "or" ^^ (_ => OrInst[F])
 
-  private def clr: Parser[Instruction] = "clr" ^^ (_ => Clr)
+  private def clr: Parser[Instruction[F]] = "clr" ^^ (_ => Clr[F])
 
-  private def absa: Parser[Instruction] = "absa" ^^ (_ => Absa)
+  private def absa: Parser[Instruction[F]] = "absa" ^^ (_ => Absa[F])
 
-  private def jam: Parser[InstructionValue => Instruction] = "jam" ^^ (_ => Jam)
+  private def jam: Parser[Lfo => Instruction[F]] = "jam" ^^ (_ => Jam[F])
 
-  private def xor: Parser[InstructionValue => Instruction] = "xor" ^^ (_ => Xor)
+  private def xor: Parser[Mask => Instruction[F]] = "xor" ^^ (_ => Xor[F])
 
-  private def not: Parser[Instruction] = "not" ^^ (_ => Not)
+  private def not: Parser[Instruction[F]] = "not" ^^ (_ => Not[F])
 
-  private def choRda: Parser[Instruction] =
+  private def choRda: Parser[Instruction[F]] =
     "cho" ~ "rda" ~ comma ~ opt(StringOrDouble) ~ comma ~ opt(
       StringOrDouble
     ) ~ comma ~ StringOrDouble ^^ {
       case _ ~ _ ~ _ ~ lfo ~ _ ~ flags ~ _ ~ addr =>
         ChoRda(
-          lfo.getOrElse(DoubleValue(0.0)),
-          flags.getOrElse(DoubleValue(0.0)),
-          addr
+          Lfo(lfo.getOrElse(DoubleValue(0.0))),
+          Flags(flags.getOrElse(DoubleValue(0.0))),
+          Addr(addr)
         )
     }
 
-  private def choSfo: Parser[Instruction] =
+  private def choSfo: Parser[Instruction[F]] =
     "cho" ~ "sof" ~ comma ~ StringOrDouble ~ comma ~ StringOrDouble ~ comma ~ StringOrDouble ^^ {
       case _ ~ _ ~ _ ~ lfo ~ _ ~ flags ~ _ ~ offset =>
-        ChoSof(lfo, flags, offset)
+        ChoSof(Lfo(lfo), Flags(flags), Offset(offset))
     }
 
-  private def choRdal: Parser[Instruction] =
+  private def choRdal: Parser[Instruction[F]] =
     "cho" ~ "rdal" ~ comma ~ StringOrDouble ^^ {
-      case _ ~ _ ~ _ ~ lfo => ChoRdal(lfo)
+      case _ ~ _ ~ _ ~ lfo => ChoRdal(Lfo(lfo))
     }
 
-  private def choParser: Parser[Instruction] = choRda | choSfo | choRdal
+  private def choParser: Parser[Instruction[F]] = choRda | choSfo | choRdal
 
-  private def paramDoubleParamDouble: Parser[Instruction] =
-    (rdax | wrax | rdfx | wrhx | wrlx | sof | exp | log | rda | wra | maxx) ~ StringOrDouble ~ comma ~ StringOrDouble ^^ {
-      case instruction ~ d1 ~ _ ~ d2 => instruction(d1, d2)
+  private def paramScaleOffset: Parser[Instruction[F]] =
+    (sof | exp | log) ~ StringOrDouble ~ comma ~ StringOrDouble ^^ {
+      case instruction ~ s ~ _ ~ o => instruction(Scale(s), Offset(o))
     }
 
-  private def paramDoubleDoubleDouble: Parser[Instruction] =
+  private def paramAddrScale: Parser[Instruction[F]] =
+    (rdax | wrax | rdfx | wrhx | wrlx | rda | wra | maxx) ~ StringOrDouble ~ comma ~ StringOrDouble ^^ {
+      case instruction ~ a ~ _ ~ s => instruction(Addr(a), Scale(s))
+    }
+
+  private def paramLfoFreqAmp: Parser[Instruction[F]] =
     (wlds | wldr) ~ StringOrDouble ~ comma ~ StringOrDouble ~ comma ~ StringOrDouble ^^ {
       case instruction ~ lfo ~ _ ~ freq ~ _ ~ amp =>
-        instruction(lfo, freq, amp)
+        instruction(Lfo(lfo), Freq(freq), Amp(amp))
     }
 
-  private def singleParser: Parser[Instruction] =
-    (orParser | and | mulxParser | ldax | rmpa | jam | xor) ~ StringOrDouble ^^ {
-      case instruction ~ value => instruction(value)
+  private def addrParser: Parser[Instruction[F]] =
+    (ldax | mulxParser) ~ StringOrDouble ^^ {
+      case instruction ~ value => instruction(Addr(value))
     }
 
-  private def loopLabel: Parser[Instruction] =
+  private def lfoParser: Parser[Instruction[F]] =
+    jam ~ StringOrDouble ^^ {
+      case instruction ~ value => instruction(Lfo(value))
+    }
+
+  private def scaleParser: Parser[Instruction[F]] =
+    rmpa ~ StringOrDouble ^^ {
+      case instruction ~ value => instruction(Scale(value))
+    }
+
+  private def maskParser: Parser[Instruction[F]] =
+    (orParser | and | xor) ~ StringOrDouble ^^ {
+      case instruction ~ value => instruction(Mask(value))
+    }
+
+  private def loopLabel: Parser[Instruction[F]] =
     wordRegex ~ ":" ^^ {
       case value ~ _ => SkipLabel(value)
     }
 
-  def parsed: Parser[Instruction] =
-    paramDoubleParamDouble | singleParser | memParser | wrap | paramDoubleDoubleDouble | equParser | skpParser | clr | choParser | absa | not | loopLabel | eof
+  def parsed: Parser[Instruction[F]] = {
+    paramAddrScale | paramScaleOffset | maskParser | wrap | lfoParser | scaleParser | addrParser | memParser | paramLfoFreqAmp | equParser | skpParser | clr | choParser | absa | not | loopLabel | eof
+  }
 
 }

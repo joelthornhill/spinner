@@ -14,7 +14,7 @@ import spinner.util.Helpers
 
 import scala.io.Source
 
-class Program[F[_]: Sync] extends EquParser with SpinParser {
+class Program[F[_]]()(implicit M: Sync[F]) extends SpinParser[F] with EquParser {
 
   private def removeComment(line: String) = {
     val index = line.indexOf(";")
@@ -24,7 +24,7 @@ class Program[F[_]: Sync] extends EquParser with SpinParser {
   }
 
   private def checkDifference(
-    instructions: List[Instruction],
+    instructions: List[Instruction[F]],
     lines: List[String]
   ): F[List[Unit]] =
     instructions
@@ -32,41 +32,41 @@ class Program[F[_]: Sync] extends EquParser with SpinParser {
       .zip(lines.map(_.replaceAll("\\s", "")))
       .map {
         case (instruction, spin) if instruction != spin =>
-          Sync[F].delay(println(s"$instruction did not equal $spin"))
-        case _ => Sync[F].unit
+          M.delay(println(s"$instruction did not equal $spin"))
+        case _ => M.unit
       }
       .sequence
 
   private def printInstructions(
-    instructions: List[Instruction]
+    instructions: List[Instruction[F]]
   ): F[List[Unit]] =
-    calculateSkip(instructions).map(i => Sync[F].delay(println(i))).sequence
+    calculateSkip(instructions).map(i => M.delay(println(i))).sequence
 
-  private def printRun(instruction: List[Instruction], instructions: Spin): F[List[Unit]] =
+  private def printRun(instruction: List[Instruction[F]], instructions: Spin): F[List[Unit]] =
     calculateSkip(instruction).map(_.runString(instructions)).sequence
 
   private def calculateSkip(
-    instructions: List[Instruction]
-  ): List[Instruction] =
+    instructions: List[Instruction[F]]
+  ): List[Instruction[F]] =
     instructions.mapWithIndex {
       case (i, j) =>
         i match {
-          case Skp(flags, StringValue(value)) =>
+          case Skp(flags, NSkip(StringValue(value))) =>
             val index = instructions.indexWhere {
-              case skipLabel: SkipLabel => skipLabel.label == value
-              case _                    => false
+              case skipLabel: SkipLabel[F] => skipLabel.label == value
+              case _                       => false
             }
 
-            if (index > 0) Skp(flags, DoubleValue((index - j).toDouble))
+            if (index > 0) Skp(flags, NSkip(DoubleValue((index - j).toDouble)))
             else i
           case _ => i
         }
     }
 
   private def runInstructions(
-    instructions: List[Instruction]
+    instructions: List[Instruction[F]]
   )(implicit consts: Map[String, InstructionValue]) = {
-    calculateSkip(instructions).foldLeft(Sync[F].pure(new Spin(consts))) {
+    calculateSkip(instructions).foldLeft(M.pure(new Spin(consts))) {
       case (acc, curr) =>
         for {
           update <- Helpers.updateProgram(curr).runF
@@ -89,9 +89,9 @@ class Program[F[_]: Sync] extends EquParser with SpinParser {
     linesWithIndex: List[(String, Int)]
   ): F[T] =
     parseResult match {
-      case Success(matched, _) => Sync[F].pure(matched)
+      case Success(matched, _) => M.pure(matched)
       case NoSuccess(reason, _) =>
-        Sync[F].raiseError(
+        M.raiseError(
           new Exception(
             s"Could not parse: ${linesWithIndex.find(_._2 == index).map(_._1).getOrElse(reason)}"
           )
@@ -104,7 +104,7 @@ class Program[F[_]: Sync] extends EquParser with SpinParser {
   ): F[List[ParseResult[T]]] =
     linesWithIndex
       .sortBy(_._2)
-      .map(line => Sync[F].delay(parse(parser, line._1)))
+      .map(line => M.delay(parse(parser, line._1)))
       .sequence
 
   private def constants(linesWithIndex: List[(String, Int)]): F[Map[String, InstructionValue]] =
@@ -114,20 +114,20 @@ class Program[F[_]: Sync] extends EquParser with SpinParser {
 
   private def spinParse(
     linesWithIndex: List[(String, Int)]
-  ): F[List[Instruction]] =
+  ): F[List[Instruction[F]]] =
     parseLines(linesWithIndex, parsed)
       .flatMap(_.mapWithIndex { case (r, i) => handleResult(r, i, linesWithIndex) }.sequence)
 
   private def fileContents(filePath: String): F[String] =
     Resource
-      .fromAutoCloseable(Sync[F].delay(Source.fromFile(filePath)))
-      .use(source => Sync[F].delay(source.getLines.mkString("\n")))
+      .fromAutoCloseable(M.delay(Source.fromFile(filePath)))
+      .use(source => M.delay(source.getLines.mkString("\n")))
 
   private def runSimulator(program: SpinProgram, testWav: String): Resource[F, SpinSimulator] = {
     val acquire: F[SpinSimulator] =
-      Sync[F].delay(new simulator.SpinSimulator(program, testWav, null, 0.5, 0.5, 0.5))
+      M.delay(new simulator.SpinSimulator(program, testWav, null, 0.5, 0.5, 0.5))
     val release: SpinSimulator => F[Unit] = simulator =>
-      Sync[F].delay(println("Stopping simulator")) >> Sync[F].delay(simulator.stopSimulator())
+      M.delay(println("Stopping simulator")) >> M.delay(simulator.stopSimulator())
     val simulatorResource = Resource.make(acquire)(release)
 
     for {
@@ -149,6 +149,6 @@ class Program[F[_]: Sync] extends EquParser with SpinParser {
       _ <- printInstructions(parsed)
       run <- runInstructions(parsed)(consts)
       _ <- checkDifference(parsed, lines.map(_._1))
-      _ <- runSimulator(run, testWav).use(s => Sync[F].delay(s.run()))
+      _ <- runSimulator(run, testWav).use(s => M.delay(s.run()))
     } yield ()
 }
