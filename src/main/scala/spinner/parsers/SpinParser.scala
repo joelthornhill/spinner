@@ -3,6 +3,7 @@ package spinner.parsers
 import cats.effect.Sync
 import spinner.model.DoubleValue
 import spinner._
+import spinner.Params._
 
 import scala.util.parsing.combinator.RegexParsers
 

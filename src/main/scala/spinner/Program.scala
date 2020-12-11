@@ -5,12 +5,13 @@ import org.andrewkilpatrick.elmGen.simulator.SpinSimulator
 import cats.implicits._
 import org.andrewkilpatrick.elmGen.SpinProgram
 import org.andrewkilpatrick.elmGen.simulator
+import spinner.Instruction.Consts
 import spinner.model.DoubleValue
-import spinner.model.InstructionValue
 import spinner.model.StringValue
 import spinner.parsers.EquParser
 import spinner.parsers.SpinParser
 import spinner.util.Helpers
+import spinner.Params._
 
 import scala.io.Source
 
@@ -42,8 +43,10 @@ class Program[F[_]]()(implicit M: Sync[F]) extends SpinParser[F] with EquParser 
   ): F[List[Unit]] =
     calculateSkip(instructions).map(i => M.delay(println(i))).sequence
 
-  private def printRun(instruction: List[Instruction[F]], instructions: Spin): F[List[Unit]] =
+  private def printRun(instruction: List[Instruction[F]], instructions: Spin): F[List[Unit]] = {
+    implicit val c = instructions.consts
     calculateSkip(instruction).map(_.runString(instructions)).sequence
+  }
 
   private def calculateSkip(
     instructions: List[Instruction[F]]
@@ -65,7 +68,7 @@ class Program[F[_]]()(implicit M: Sync[F]) extends SpinParser[F] with EquParser 
 
   private def runInstructions(
     instructions: List[Instruction[F]]
-  )(implicit consts: Map[String, InstructionValue]) = {
+  )(implicit consts: Consts) = {
     calculateSkip(instructions).foldLeft(M.pure(new Spin(consts))) {
       case (acc, curr) =>
         for {
@@ -107,7 +110,7 @@ class Program[F[_]]()(implicit M: Sync[F]) extends SpinParser[F] with EquParser 
       .map(line => M.delay(parse(parser, line._1)))
       .sequence
 
-  private def constants(linesWithIndex: List[(String, Int)]): F[Map[String, InstructionValue]] =
+  private def constants(linesWithIndex: List[(String, Int)]): F[Consts] =
     parseLines(linesWithIndex, equParser)
       .flatMap(_.mapWithIndex { case (r, i) => handleResult(r, i, linesWithIndex) }.sequence)
       .map(_.flatten.toMap)

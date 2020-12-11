@@ -3,20 +3,14 @@ package spinner.util
 import cats.data.StateT
 import cats.effect.Sync
 import spinner.model._
-import spinner.Addr
-import spinner.Amp
-import spinner.Flags
-import spinner.Freq
+import spinner.Params._
 import spinner.Instruction
-import spinner.Lfo
-import spinner.Mask
-import spinner.Offset
 import spinner.ReservedWord
-import spinner.Scale
 import spinner.Spin
 import cats.syntax.functor._
 import cats.syntax.flatMap._
 import cats.syntax.applicativeError._
+import spinner.Instruction.Consts
 
 object Helpers {
 
@@ -26,6 +20,7 @@ object Helpers {
     instruction: Instruction[F]
   )(implicit M: Sync[F]): StateT[F, Spin, Unit] = StateT[F, Spin, Unit] { s =>
     val newInstructions = Spin.copy(s.memoryMap, s.instList, s.consts)
+    implicit val consts: Consts = s.consts
     instruction.run(newInstructions).map((newInstructions, _))
   }
 
@@ -33,10 +28,10 @@ object Helpers {
     addr: Addr,
     scale: Scale,
     f: (Int, Double) => Unit
-  )(consts: Map[String, InstructionValue])(implicit M: Sync[F]): F[Unit] =
+  )(implicit M: Sync[F], consts: Consts): F[Unit] =
     for {
-      addr <- getInt(addr.value)(consts)
-      scale <- getDouble(scale.value, consts)
+      addr <- getInt(addr.value)
+      scale <- getDouble(scale.value)
     } yield f(addr, scale)
 
   def runner[F[_]: Sync](
@@ -44,56 +39,34 @@ object Helpers {
     freq: Freq,
     amp: Amp,
     f: (Int, Int, Int) => Unit
-  )(consts: Map[String, InstructionValue]): F[Unit] = {
+  )(implicit consts: Consts): F[Unit] =
     for {
-      lfo <- getInt(lfo.value)(consts)
-      freq <- getInt(freq.value)(consts)
-      amp <- getInt(amp.value)(consts)
-      run <- Sync[F].delay(f(lfo, freq, amp))
-    } yield run
-  }
-
-  def runner[F[_]: Sync](
-    value: Addr,
-    f: Int => Unit
-  )(consts: Map[String, InstructionValue]) =
-    getInt(value.value)(consts).map(f(_))
-
-  def runner[F[_]: Sync](
-    value: Mask,
-    f: Int => Unit
-  )(consts: Map[String, InstructionValue]) =
-    getInt(value.value)(consts).map(f(_))
-
-  def runner[F[_]: Sync](
-    value: Lfo,
-    f: Int => Unit
-  )(consts: Map[String, InstructionValue]) =
-    getInt(value.value)(consts).map(f(_))
+      lfo <- getInt(lfo.value)
+      freq <- getInt(freq.value)
+      amp <- getInt(amp.value)
+    } yield f(lfo, freq, amp)
 
   def runner[F[_]: Sync](
     scale: Scale,
     offset: Offset,
     f: (Double, Double) => Unit
-  )(consts: Map[String, InstructionValue]) =
+  )(implicit consts: Consts) =
     for {
-      scale <- getDouble(scale.value, consts)
-      offset <- getDouble(offset.value, consts)
-      run <- Sync[F].delay(f(scale, offset))
-    } yield run
+      scale <- getDouble(scale.value)
+      offset <- getDouble(offset.value)
+    } yield f(scale, offset)
 
   def runner[F[_]: Sync](
     lfo: Lfo,
     flags: Flags,
     offset: Offset,
     f: (Int, Int, Double) => Unit
-  )(consts: Map[String, InstructionValue]) =
+  )(implicit consts: Consts) =
     for {
-      lfo <- getInt(lfo.value)(consts)
-      flags <- getInt(flags.value)(consts)
-      offset <- getDouble(offset.value, consts)
-      run <- Sync[F].delay(f(lfo, flags, offset))
-    } yield run
+      lfo <- getInt(lfo.value)
+      flags <- getInt(flags.value)
+      offset <- getDouble(offset.value)
+    } yield f(lfo, flags, offset)
 
   def findInReserved[F[_]: Sync](s: String): F[Double] =
     Sync[F].catchNonFatal(ReservedWord.withName(s.toUpperCase).value.toDouble)
@@ -101,13 +74,13 @@ object Helpers {
   def findInConsts[F[_]](
     s: String,
     getDouble: InstructionValue => F[Double]
-  )(consts: Map[String, InstructionValue])(implicit M: Sync[F]): F[Double] = {
-    M.pure(consts.get(s)).flatMap {
+  )(implicit M: Sync[F], consts: Consts): F[Double] = {
+    consts.get(s) match {
       case Some(StringValue(value)) =>
         findInReserved(value).attempt.flatMap {
           case Right(const) => M.pure(const)
           case Left(_) =>
-            M.pure(consts.get(value)).flatMap {
+            consts.get(value) match {
               case Some(StringValue(stringValue)) =>
                 findInReserved(stringValue).attempt flatMap {
                   case Right(v) => M.pure(v)
@@ -128,20 +101,17 @@ object Helpers {
 
   def getInt[F[_]: Sync](
     addr: InstructionValue
-  )(consts: Map[String, InstructionValue]): F[Int] =
-    getDouble(addr, consts).flatMap(d => Sync[F].catchNonFatal(d.toInt))
+  )(implicit consts: Consts): F[Int] =
+    getDouble(addr).flatMap(d => Sync[F].catchNonFatal(d.toInt))
 
   def getDouble[F[_]: Sync](
-    addr: InstructionValue,
-    consts: Map[String, InstructionValue]
-  ): F[Double] =
+    addr: InstructionValue
+  )(implicit consts: Consts): F[Double] =
     addr match {
       case DoubleValue(value) => Sync[F].pure(value)
       case StringValue(value) =>
-        findInReserved[F](value).handleErrorWith(_ =>
-          findInConsts(value, getDouble(_, consts))(consts)
-        )
-      case WithArithmetic(value) => calculateArithmetic(value, getDouble(_, consts))
+        findInReserved[F](value).handleErrorWith(_ => findInConsts(value, getDouble(_)))
+      case WithArithmetic(value) => calculateArithmetic(value, getDouble(_))
     }
 
   def handleAllOffsets[F[_]](
@@ -150,9 +120,9 @@ object Helpers {
     f: (String, Double, Double) => Unit,
     f2: (String, Int, Double) => Unit,
     f3: (Int, Double) => Unit
-  )(consts: Map[String, InstructionValue])(implicit M: Sync[F]) =
+  )(implicit M: Sync[F], consts: Consts) =
     for {
-      scale <- getDouble(scale.value, consts)
+      scale <- getDouble(scale.value)
       run <- addr.value match {
         case WithArithmetic(DelayEnd(StringValue(value))) =>
           M.delay(f(value, 1.0, scale))
@@ -162,7 +132,7 @@ object Helpers {
           M.delay(f2(value, offset.toInt, scale))
         case StringValue(value) =>
           M.delay(f(value, 0.0, scale))
-        case _ => getInt(addr.value)(consts).map(f3(_, scale))
+        case _ => getInt(addr.value).map(f3(_, scale))
       }
     } yield run
 
