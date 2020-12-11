@@ -38,15 +38,16 @@ class Program[F[_]]()(implicit M: Sync[F]) extends SpinParser[F] with EquParser 
       }
       .sequence
 
-  private def printInstructions(
+  private def printSpin(
     instructions: List[Instruction[F]]
-  ): F[List[Unit]] =
-    calculateSkip(instructions).map(i => M.delay(println(i))).sequence
-
-  private def printRun(instruction: List[Instruction[F]], instructions: Spin): F[List[Unit]] = {
-    implicit val c = instructions.consts
-    calculateSkip(instruction).map(_.runString(instructions)).sequence
+  ): F[List[Unit]] = {
+    instructions.map(_.spinInstruction()).map(i => M.delay(println(i))).sequence
   }
+
+//  private def printInstructions(
+//    instructions: List[Instruction[F]]
+//  ): F[List[Unit]] =
+//    calculateSkip(instructions).map(i => M.delay(println(i))).sequence
 
   private def calculateSkip(
     instructions: List[Instruction[F]]
@@ -148,8 +149,8 @@ class Program[F[_]]()(implicit M: Sync[F]) extends SpinParser[F] with EquParser 
       consts <- constants(lines)
       program = new Spin(consts)
       parsed <- spinParse(lines)
-      _ <- printRun(parsed, program)
-      _ <- printInstructions(parsed)
+      _ <- printSpin(parsed)
+//      _ <- printInstructions(parsed)
       run <- runInstructions(parsed)(consts)
       _ <- checkDifference(parsed, lines.map(_._1))
       _ <- runSimulator(run, testWav).use(s => M.delay(s.run()))

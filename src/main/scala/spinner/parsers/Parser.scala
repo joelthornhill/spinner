@@ -98,7 +98,7 @@ trait Parser extends RegexParsers {
     }
 
   def word: Parser[InstructionValue] =
-    orWord | wordWithDivision | wordWithAddition | wordWithMultiplication | wordWithHash | wordWithCarat | binaryWord | singleWord
+    orWord | wordWithDivision | wordWithAddition | wordWithMultiplication | wordWithHash | wordWithCarat | binaryWord | singleWord | hexWord
 
   def double: Parser[InstructionValue] =
     doubleWithDivision | doubleWithAddition | doubleWithMultiplication | singleDouble

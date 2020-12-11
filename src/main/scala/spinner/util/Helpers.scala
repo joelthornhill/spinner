@@ -71,10 +71,7 @@ object Helpers {
   def findInReserved[F[_]: Sync](s: String): F[Double] =
     Sync[F].catchNonFatal(ReservedWord.withName(s.toUpperCase).value.toDouble)
 
-  def findInConsts[F[_]](
-    s: String,
-    getDouble: InstructionValue => F[Double]
-  )(implicit M: Sync[F], consts: Consts): F[Double] = {
+  def findInConsts[F[_]](s: String)(implicit M: Sync[F], consts: Consts): F[Double] = {
     consts.get(s) match {
       case Some(StringValue(value)) =>
         findInReserved(value).attempt.flatMap {
@@ -87,14 +84,13 @@ object Helpers {
                   case _ =>
                     M.raiseError(SpinError(s"Could not find: $stringValue in consts"))
                 }
-              case Some(DoubleValue(doubleValue)) => M.pure(doubleValue)
-              case Some(WithArithmetic(withArithmetic)) =>
-                calculateArithmetic(withArithmetic, getDouble)
-              case _ => M.raiseError(SpinError(s"Could not find $value in consts"))
+              case Some(DoubleValue(doubleValue))       => M.pure(doubleValue)
+              case Some(WithArithmetic(withArithmetic)) => withArithmetic.run
+              case _                                    => M.raiseError(SpinError(s"Could not find $value in consts"))
             }
         }
       case Some(DoubleValue(value))    => M.pure(value)
-      case Some(WithArithmetic(value)) => calculateArithmetic(value, getDouble)
+      case Some(WithArithmetic(value)) => value.run
       case None                        => M.raiseError(SpinError(s"Could not find: $s in consts"))
     }
   }
@@ -110,8 +106,8 @@ object Helpers {
     addr match {
       case DoubleValue(value) => Sync[F].pure(value)
       case StringValue(value) =>
-        findInReserved[F](value).handleErrorWith(_ => findInConsts(value, getDouble(_)))
-      case WithArithmetic(value) => calculateArithmetic(value, getDouble(_))
+        findInReserved[F](value).handleErrorWith(_ => findInConsts(value))
+      case WithArithmetic(value) => value.run
     }
 
   def handleAllOffsets[F[_]](
@@ -125,54 +121,14 @@ object Helpers {
       scale <- getDouble(scale.value)
       run <- addr.value match {
         case WithArithmetic(DelayEnd(StringValue(value))) =>
-          M.delay(f(value, 1.0, scale))
+          M.pure(f(value, 1.0, scale))
         case WithArithmetic(MidpointDelay(StringValue(value))) =>
-          M.delay(f(value, 0.5, scale))
+          M.pure(f(value, 0.5, scale))
         case WithArithmetic(Addition(StringValue(value), DoubleValue(offset))) =>
-          M.delay(f2(value, offset.toInt, scale))
+          M.pure(f2(value, offset.toInt, scale))
         case StringValue(value) =>
-          M.delay(f(value, 0.0, scale))
+          M.pure(f(value, 0.0, scale))
         case _ => getInt(addr.value).map(f3(_, scale))
       }
     } yield run
-
-  def calculateArithmetic[F[_]](
-    arithmetic: Arithmetic,
-    getDouble: InstructionValue => F[Double]
-  )(implicit M: Sync[F]): F[Double] = {
-    arithmetic match {
-      case Division(a, b) =>
-        for {
-          a <- getDouble(a)
-          b <- getDouble(b)
-        } yield a / b
-      case Addition(a, b) =>
-        for {
-          a <- getDouble(a)
-          b <- getDouble(b)
-        } yield a + b
-      case Minus(value) => getDouble(value).map(-_)
-      case Multiplication(a, b) =>
-        for {
-          a <- getDouble(a)
-          b <- getDouble(b)
-        } yield a * b
-      case DelayEnd(_) => M.raiseError(SpinError("Delay end should be handled elsewhere"))
-      case MidpointDelay(_) =>
-        M.raiseError(SpinError("Midpoint should be handled elsewhere"))
-      case Binary(s) =>
-        M.catchNonFatal(Integer.parseInt(s.value.replaceAll("_", ""), 2).toDouble)
-      case Hex(s) =>
-        M.catchNonFatal(Integer.parseInt(s.value, 16).toDouble)
-      case Or(value) =>
-        value.foldLeft(M.pure(0.0)) {
-          case (acc, b) =>
-            for {
-              left <- acc
-              right <- getDouble(b)
-              asDouble <- getDouble(DoubleValue((left.toInt | right.toInt).toDouble))
-            } yield asDouble
-        }
-    }
-  }
 }
