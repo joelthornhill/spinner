@@ -13,7 +13,6 @@ import spinner.model.DoubleValue
 import spinner.model.InstructionValue
 import spinner.model.MinusValues
 import spinner.model.StringValue
-import spinner.model.WithArithmetic
 import cats.syntax.flatMap._
 import Instruction._
 
@@ -208,36 +207,31 @@ case class ChoRda[F[_]: Sync](
 ) extends Instruction[F] {
   def run(
     spin: Spin
-  )(implicit c: Consts) =
+  )(implicit c: Consts) = {
+    val M = Sync[F]
     for {
       lfo <- getInt(lfo.value)
       flags <- getInt(flags.value)
       run <- addr.value match {
-        case WithArithmetic(Addition(StringValue(value), DoubleValue(offset))) =>
-          Sync[F].delay(spin.chorusReadDelay(lfo, flags, value, offset.toInt))
-        case WithArithmetic(
-            DelayEnd(
-              WithArithmetic(
-                MinusValues(
-                  StringValue(word),
-                  WithArithmetic(MinusValues(StringValue(wordMinus), DoubleValue(m)))
-                )
-              )
-            )
+        case Addition(StringValue(value), DoubleValue(offset)) =>
+          M.delay(spin.chorusReadDelay(lfo, flags, value, offset.toInt))
+        case DelayEnd(
+            MinusValues(StringValue(word), MinusValues(StringValue(wordMinus), DoubleValue(m)))
             ) =>
           getInt(wordMinus).flatMap(minus =>
-            Sync[F].delay(spin.chorusReadDelay(lfo, flags, word, 1, minus - m.toInt))
+            M.delay(spin.chorusReadDelay(lfo, flags, word, 1, minus - m.toInt))
           )
-        case WithArithmetic(DelayEnd(WithArithmetic(MinusValues(StringValue(a), b)))) =>
-          getInt(b).flatMap(minus => Sync[F].delay(spin.chorusReadDelay(lfo, flags, a, 1, minus)))
-        case WithArithmetic(DelayEnd(StringValue(value))) =>
-          Sync[F].delay(spin.chorusReadDelay(lfo, flags, value, 1))
+        case DelayEnd(MinusValues(StringValue(a), b)) =>
+          getInt(b).flatMap(minus => M.delay(spin.chorusReadDelay(lfo, flags, a, 1, minus)))
+        case DelayEnd(StringValue(value)) =>
+          M.delay(spin.chorusReadDelay(lfo, flags, value, 1))
         case StringValue(value) =>
-          Sync[F].delay(spin.chorusReadDelay(lfo, flags, value, 0))
+          M.delay(spin.chorusReadDelay(lfo, flags, value, 0))
         case _ =>
-          getInt(addr.value).flatMap(addr => Sync[F].delay(spin.chorusReadDelay(lfo, flags, addr)))
+          getInt(addr.value).flatMap(addr => M.delay(spin.chorusReadDelay(lfo, flags, addr)))
       }
     } yield run
+  }
 
   override def toString: String = s"chorusReadDelay($lfo, $flags, $addr)"
 

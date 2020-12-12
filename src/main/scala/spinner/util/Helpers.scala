@@ -84,14 +84,14 @@ object Helpers {
                   case _ =>
                     M.raiseError(SpinError(s"Could not find: $stringValue in consts"))
                 }
-              case Some(DoubleValue(doubleValue))       => M.pure(doubleValue)
-              case Some(WithArithmetic(withArithmetic)) => withArithmetic.run
-              case _                                    => M.raiseError(SpinError(s"Could not find $value in consts"))
+              case Some(DoubleValue(doubleValue)) => M.pure(doubleValue)
+              case Some(a: Arithmetic)            => a.run
+              case _                              => M.raiseError(SpinError(s"Could not find $value in consts"))
             }
         }
-      case Some(DoubleValue(value))    => M.pure(value)
-      case Some(WithArithmetic(value)) => value.run
-      case None                        => M.raiseError(SpinError(s"Could not find: $s in consts"))
+      case Some(DoubleValue(value)) => M.pure(value)
+      case Some(a: Arithmetic)      => a.run
+      case None                     => M.raiseError(SpinError(s"Could not find: $s in consts"))
     }
   }
 
@@ -107,7 +107,7 @@ object Helpers {
       case DoubleValue(value) => Sync[F].pure(value)
       case StringValue(value) =>
         findInReserved[F](value).handleErrorWith(_ => findInConsts(value))
-      case WithArithmetic(value) => value.run
+      case a: Arithmetic => a.run
     }
 
   def handleAllOffsets[F[_]](
@@ -120,11 +120,11 @@ object Helpers {
     for {
       scale <- getDouble(scale.value)
       run <- addr.value match {
-        case WithArithmetic(DelayEnd(StringValue(value))) =>
+        case DelayEnd(StringValue(value)) =>
           M.pure(f(value, 1.0, scale))
-        case WithArithmetic(MidpointDelay(StringValue(value))) =>
+        case MidpointDelay(StringValue(value)) =>
           M.pure(f(value, 0.5, scale))
-        case WithArithmetic(Addition(StringValue(value), DoubleValue(offset))) =>
+        case Addition(StringValue(value), DoubleValue(offset)) =>
           M.pure(f2(value, offset.toInt, scale))
         case StringValue(value) =>
           M.pure(f(value, 0.0, scale))

@@ -7,11 +7,6 @@ import spinner.util.Helpers._
 import cats.syntax.functor._
 import cats.syntax.flatMap._
 
-sealed trait Arithmetic {
-  def spinString: String
-  def run[F[_]: Sync](implicit c: Consts): F[Double]
-}
-
 case class Division(a: InstructionValue, b: InstructionValue) extends Arithmetic {
   override def spinString: String = s"${a.spinString}/${b.spinString}"
 
@@ -61,7 +56,7 @@ case class Multiplication(a: InstructionValue, b: InstructionValue) extends Arit
   }
 }
 case class DelayEnd(value: InstructionValue) extends Arithmetic {
-  override def spinString: String = s"#${value.spinString}"
+  override def spinString: String = s"${value.spinString}#"
 
   override def run[F[_]: Sync](implicit c: Consts): F[Double] =
     Sync[F].raiseError(SpinError("Delay end should be handled elsewhere"))

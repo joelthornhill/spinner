@@ -1,5 +1,8 @@
 package spinner.model
 
+import cats.effect.Sync
+import spinner.Instruction.Consts
+
 sealed trait InstructionValue {
   def spinString: String
 }
@@ -14,6 +17,7 @@ case class DoubleValue(value: Double) extends InstructionValue {
 case class StringValue(value: String) extends InstructionValue {
   override def spinString: String = value
 }
-case class WithArithmetic[F[_]](value: Arithmetic) extends InstructionValue {
-  override def spinString: String = value.spinString
+
+trait Arithmetic extends InstructionValue {
+  def run[F[_]: Sync](implicit c: Consts): F[Double]
 }
