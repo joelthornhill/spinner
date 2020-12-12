@@ -881,6 +881,18 @@ public class SpinProgram implements Serializable {
 		instList.add(new ChorusReadDelay(lfo, flags, addr));
 	}
 
+	public void chorusReadDelay(int lfo, int flags, String memName, int offset, int minus) {
+		//checkCodeLen();
+		MemSegment seg = getDelayMemByName(memName);
+		int ofst = offset;
+		if (ofst < 0 || ofst > seg.getLength()) {
+			throw new ElmProgramException("offset out of range: " + ofst
+					+ " - valid range: 0 to " + seg.getLength());
+		}
+		int addr = seg.getStart() + ofst - minus;
+		instList.add(new ChorusReadDelay(lfo, flags, addr));
+	}
+
 	/**
 	 * Reads a value from the delay memory, scales it by scale and
 	 * then adds it to the current value of the ACC.

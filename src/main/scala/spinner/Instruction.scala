@@ -8,8 +8,10 @@ import cats.syntax.functor._
 import spinner.Instruction.Consts
 import spinner.Params._
 import spinner.model.Addition
+import spinner.model.DelayEnd
 import spinner.model.DoubleValue
 import spinner.model.InstructionValue
+import spinner.model.MinusValues
 import spinner.model.StringValue
 import spinner.model.WithArithmetic
 import cats.syntax.flatMap._
@@ -213,6 +215,23 @@ case class ChoRda[F[_]: Sync](
       run <- addr.value match {
         case WithArithmetic(Addition(StringValue(value), DoubleValue(offset))) =>
           Sync[F].delay(spin.chorusReadDelay(lfo, flags, value, offset.toInt))
+        case WithArithmetic(
+            DelayEnd(
+              WithArithmetic(
+                MinusValues(
+                  StringValue(word),
+                  WithArithmetic(MinusValues(StringValue(wordMinus), DoubleValue(m)))
+                )
+              )
+            )
+            ) =>
+          getInt(wordMinus).flatMap(minus =>
+            Sync[F].delay(spin.chorusReadDelay(lfo, flags, word, 1, minus - m.toInt))
+          )
+        case WithArithmetic(DelayEnd(WithArithmetic(MinusValues(StringValue(a), b)))) =>
+          getInt(b).flatMap(minus => Sync[F].delay(spin.chorusReadDelay(lfo, flags, a, 1, minus)))
+        case WithArithmetic(DelayEnd(StringValue(value))) =>
+          Sync[F].delay(spin.chorusReadDelay(lfo, flags, value, 1))
         case StringValue(value) =>
           Sync[F].delay(spin.chorusReadDelay(lfo, flags, value, 0))
         case _ =>

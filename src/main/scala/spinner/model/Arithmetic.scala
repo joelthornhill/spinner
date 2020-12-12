@@ -33,6 +33,18 @@ case class Addition(a: InstructionValue, b: InstructionValue) extends Arithmetic
     } yield a + b
   }
 }
+
+case class MinusValues(a: InstructionValue, b: InstructionValue) extends Arithmetic {
+  override def spinString: String = s"${a.spinString}-${b.spinString}"
+
+  override def run[F[_]: Sync](implicit c: Consts): F[Double] = {
+    for {
+      a <- getDouble(a)
+      b <- getDouble(b)
+    } yield a - b
+  }
+}
+
 case class Minus(value: InstructionValue) extends Arithmetic {
   override def spinString: String = s"-${value.spinString}"
 
@@ -49,7 +61,7 @@ case class Multiplication(a: InstructionValue, b: InstructionValue) extends Arit
   }
 }
 case class DelayEnd(value: InstructionValue) extends Arithmetic {
-  override def spinString: String = s"${value.spinString}#"
+  override def spinString: String = s"#${value.spinString}"
 
   override def run[F[_]: Sync](implicit c: Consts): F[Double] =
     Sync[F].raiseError(SpinError("Delay end should be handled elsewhere"))

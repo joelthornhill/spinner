@@ -34,6 +34,13 @@ trait Parser extends RegexParsers {
       case double ~ _ ~ _ ~ _            => double
     }
 
+  def doubleWithMinus: Parser[InstructionValue] =
+    singleDouble ~ "-".r ~ opt(singleDouble) ~ opt(singleWord) ^^ {
+      case double ~ _ ~ Some(add) ~ None => WithArithmetic(model.MinusValues(double, add))
+      case double ~ _ ~ None ~ Some(add) => WithArithmetic(model.MinusValues(double, add))
+      case double ~ _ ~ _ ~ _            => double
+    }
+
   def doubleWithMultiplication: Parser[InstructionValue] =
     singleDouble ~ "\\*".r ~ opt(singleDouble) ~ opt(singleWord) ^^ {
       case double ~ _ ~ Some(multiplier) ~ None =>
@@ -66,21 +73,37 @@ trait Parser extends RegexParsers {
       case word ~ _ ~ _ ~ _ => word
     }
 
+  def wordWithMinus: Parser[InstructionValue] =
+    singleWord ~ "-".r ~ opt(singleWord) ~ opt(singleDouble) ^^ {
+      case word ~ _ ~ Some(minus) ~ _ => WithArithmetic(model.MinusValues(word, minus))
+      case word ~ _ ~ _ ~ Some(minus) => WithArithmetic(model.MinusValues(word, minus))
+      case word ~ _ ~ _ ~ _           => word
+    }
+
   def wordWithHash: Parser[InstructionValue] =
-    wordRegex ~ "#".r ^^ {
-      case word ~ _ => WithArithmetic(DelayEnd(StringValue(word)))
+    wordRegex ~ "#".r ~ opt("-".r) ~ opt(wordRegex) ~ opt("-".r) ~ opt(intParser) ^^ {
+      case word ~ _ ~ Some(_) ~ Some(wordMinus) ~ None ~ None =>
+        WithArithmetic(
+          DelayEnd(WithArithmetic(MinusValues(StringValue(word), StringValue(wordMinus))))
+        )
+      case word ~ _ ~ Some(_) ~ Some(wordMinus) ~ Some(_) ~ Some(m) =>
+        WithArithmetic(
+          DelayEnd(
+            WithArithmetic(
+              MinusValues(
+                StringValue(word),
+                WithArithmetic(MinusValues(StringValue(wordMinus), DoubleValue(m)))
+              )
+            )
+          )
+        )
+      case word ~ _ ~ _ ~ _ ~ _ ~ _ => WithArithmetic(DelayEnd(StringValue(word)))
     }
 
   def wordWithCarat: Parser[InstructionValue] =
     wordRegex ~ "\\^".r ^^ {
       case word ~ _ => WithArithmetic(MidpointDelay(StringValue(word)))
     }
-
-//  def wordWithCarat: Parser[InstructionValue] =
-//    wordRegex ~ "\\^".r  ~ opt("\\+".r) ~ opt(singleDouble)  ^^ {
-//      case word ~ _ ~ Some(_) ~ Some(add) => WithArithmetic(MidpointDelay(WithArithmetic(Addition(StringValue(word), add))))
-//      case word ~ _ ~ _ ~ _ => WithArithmetic(MidpointDelay(StringValue(word)))
-//    }
 
   def orWord: Parser[InstructionValue] =
     """([a-zA-Z0-9_]+\s?\|\s?)+[a-zA-Z0-9_]+""".r ^^ { word =>
@@ -98,8 +121,9 @@ trait Parser extends RegexParsers {
     }
 
   def word: Parser[InstructionValue] =
-    orWord | wordWithDivision | wordWithAddition | wordWithMultiplication | wordWithHash | wordWithCarat | binaryWord | singleWord | hexWord
+    orWord | wordWithDivision | wordWithAddition | wordWithMultiplication | wordWithMinus | wordWithHash | wordWithCarat | binaryWord | singleWord | hexWord
 
   def double: Parser[InstructionValue] =
-    doubleWithDivision | doubleWithAddition | doubleWithMultiplication | singleDouble
+    doubleWithDivision | doubleWithMinus | doubleWithAddition | doubleWithMultiplication | singleDouble
+
 }
