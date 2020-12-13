@@ -23,9 +23,6 @@ sealed trait Instruction[F[_]] {
 
 object Instruction {
   type Consts = Map[String, InstructionValue]
-
-  def printF[F[_]: Sync](s: String): F[Unit] = Sync[F].delay(println(s))
-
 }
 
 case class Rdax[F[_]: Sync](addr: Addr, scale: Scale) extends Instruction[F] {
@@ -135,16 +132,15 @@ case class EOF[F[_]: Sync]() extends Instruction[F] {
   override def spinInstruction(): String = ""
 }
 
-case class Skp[F[_]: Sync](flags: Flags, nSkip: NSkip) extends Instruction[F] {
+case class Skp[F[_]](flags: Flags, nSkip: NSkip)(implicit M: Sync[F]) extends Instruction[F] {
   def run(
     spin: Spin
   )(implicit c: Consts): F[Unit] =
     for {
       flags <- getInt(flags.value)
       run <- nSkip.value match {
-        case StringValue(_) => Sync[F].unit
-        case _ =>
-          getInt(nSkip.value).flatMap(nSkip => Sync[F].delay(spin.skip(flags, nSkip)))
+        case StringValue(_) => M.unit
+        case _              => getInt(nSkip.value).flatMap(nSkip => M.delay(spin.skip(flags, nSkip)))
       }
     } yield run
 
@@ -209,26 +205,28 @@ case class ChoRda[F[_]: Sync](
     spin: Spin
   )(implicit c: Consts) = {
     val M = Sync[F]
+    val f1: (Int, Int, String, Int) => Unit = spin.chorusReadDelay
+    val f2: (Int, Int, String, Int, Int) => Unit = spin.chorusReadDelay
+    val f3: (Int, Int, Int) => Unit = spin.chorusReadDelay
+
     for {
       lfo <- getInt(lfo.value)
       flags <- getInt(flags.value)
       run <- addr.value match {
         case Addition(StringValue(value), DoubleValue(offset)) =>
-          M.delay(spin.chorusReadDelay(lfo, flags, value, offset.toInt))
+          M.delay(f1(lfo, flags, value, offset.toInt))
         case DelayEnd(
             MinusValues(StringValue(word), MinusValues(StringValue(wordMinus), DoubleValue(m)))
             ) =>
-          getInt(wordMinus).flatMap(minus =>
-            M.delay(spin.chorusReadDelay(lfo, flags, word, 1, minus - m.toInt))
-          )
+          getInt(wordMinus).flatMap(minus => M.delay(f2(lfo, flags, word, 1, minus - m.toInt)))
         case DelayEnd(MinusValues(StringValue(a), b)) =>
-          getInt(b).flatMap(minus => M.delay(spin.chorusReadDelay(lfo, flags, a, 1, minus)))
+          getInt(b).flatMap(minus => M.delay(f2(lfo, flags, a, 1, minus)))
         case DelayEnd(StringValue(value)) =>
-          M.delay(spin.chorusReadDelay(lfo, flags, value, 1))
+          M.delay(f1(lfo, flags, value, 1))
         case StringValue(value) =>
-          M.delay(spin.chorusReadDelay(lfo, flags, value, 0))
+          M.delay(f1(lfo, flags, value, 0))
         case _ =>
-          getInt(addr.value).flatMap(addr => M.delay(spin.chorusReadDelay(lfo, flags, addr)))
+          getInt(addr.value).flatMap(addr => M.delay(f3(lfo, flags, addr)))
       }
     } yield run
   }

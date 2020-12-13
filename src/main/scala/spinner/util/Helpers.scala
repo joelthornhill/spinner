@@ -1,5 +1,6 @@
 package spinner.util
 
+import cats.MonadError
 import cats.data.StateT
 import cats.effect.Sync
 import spinner.model._
@@ -32,79 +33,83 @@ object Helpers {
     for {
       addr <- getInt(addr.value)
       scale <- getDouble(scale.value)
-    } yield f(addr, scale)
+      result <- M.delay(f(addr, scale))
+    } yield result
 
-  def runner[F[_]: Sync](
+  def runner[F[_]](
     lfo: Lfo,
     freq: Freq,
     amp: Amp,
     f: (Int, Int, Int) => Unit
-  )(implicit consts: Consts): F[Unit] =
+  )(implicit consts: Consts, M: Sync[F]): F[Unit] =
     for {
       lfo <- getInt(lfo.value)
       freq <- getInt(freq.value)
       amp <- getInt(amp.value)
-    } yield f(lfo, freq, amp)
+      result <- M.delay(f(lfo, freq, amp))
+    } yield result
 
-  def runner[F[_]: Sync](
+  def runner[F[_]](
     scale: Scale,
     offset: Offset,
     f: (Double, Double) => Unit
-  )(implicit consts: Consts) =
+  )(implicit consts: Consts, M: Sync[F]) =
     for {
       scale <- getDouble(scale.value)
       offset <- getDouble(offset.value)
-    } yield f(scale, offset)
+      result <- M.delay(f(scale, offset))
+    } yield result
 
-  def runner[F[_]: Sync](
+  def runner[F[_]](
     lfo: Lfo,
     flags: Flags,
     offset: Offset,
     f: (Int, Int, Double) => Unit
-  )(implicit consts: Consts) =
+  )(implicit consts: Consts, M: Sync[F]) =
     for {
       lfo <- getInt(lfo.value)
       flags <- getInt(flags.value)
       offset <- getDouble(offset.value)
-    } yield f(lfo, flags, offset)
+      result <- M.delay(f(lfo, flags, offset))
+    } yield result
 
-  def findInReserved[F[_]: Sync](s: String): F[Double] =
-    Sync[F].catchNonFatal(ReservedWord.withName(s.toUpperCase).value.toDouble)
+  def findInReserved[F[_]](s: String)(implicit M: MonadError[F, Throwable]): F[Double] =
+    M.catchNonFatal(ReservedWord.withName(s.toUpperCase).value.toDouble)
 
-  def findInConsts[F[_]](s: String)(implicit M: Sync[F], consts: Consts): F[Double] = {
+  def findInConsts[F[_]](
+    s: String
+  )(implicit M: MonadError[F, Throwable], consts: Consts): F[Double] = {
+
+    def handleNotFound(value: String): F[Double] =
+      consts.get(value) match {
+        case Some(StringValue(stringValue)) =>
+          findInReserved(stringValue).handleErrorWith(_ =>
+            M.raiseError(SpinError(s"Could not find: $stringValue in consts"))
+          )
+        case Some(DoubleValue(doubleValue)) => M.pure(doubleValue)
+        case Some(a: Arithmetic)            => a.run
+        case _                              => M.raiseError(SpinError(s"Could not find $value in consts"))
+      }
+
     consts.get(s) match {
       case Some(StringValue(value)) =>
-        findInReserved(value).attempt.flatMap {
-          case Right(const) => M.pure(const)
-          case Left(_) =>
-            consts.get(value) match {
-              case Some(StringValue(stringValue)) =>
-                findInReserved(stringValue).attempt flatMap {
-                  case Right(v) => M.pure(v)
-                  case _ =>
-                    M.raiseError(SpinError(s"Could not find: $stringValue in consts"))
-                }
-              case Some(DoubleValue(doubleValue)) => M.pure(doubleValue)
-              case Some(a: Arithmetic)            => a.run
-              case _                              => M.raiseError(SpinError(s"Could not find $value in consts"))
-            }
-        }
-      case Some(DoubleValue(value)) => M.pure(value)
-      case Some(a: Arithmetic)      => a.run
-      case None                     => M.raiseError(SpinError(s"Could not find: $s in consts"))
+        findInReserved(value).handleErrorWith(_ => handleNotFound(value))
+      case Some(DoubleValue(value))     => M.pure(value)
+      case Some(arithmetic: Arithmetic) => arithmetic.run
+      case None                         => M.raiseError(SpinError(s"Could not find: $s in consts"))
     }
   }
 
-  def getInt[F[_]: Sync](
+  def getInt[F[_]](
     addr: InstructionValue
-  )(implicit consts: Consts): F[Int] =
-    getDouble(addr).flatMap(d => Sync[F].catchNonFatal(d.toInt))
+  )(implicit consts: Consts, M: MonadError[F, Throwable]): F[Int] =
+    getDouble(addr).flatMap(d => M.catchNonFatal(d.toInt))
 
-  def getDouble[F[_]: Sync](
+  def getDouble[F[_]](
     addr: InstructionValue
-  )(implicit consts: Consts): F[Double] =
+  )(implicit consts: Consts, M: MonadError[F, Throwable]): F[Double] =
     addr match {
-      case DoubleValue(value) => Sync[F].pure(value)
+      case DoubleValue(value) => M.pure(value)
       case StringValue(value) =>
         findInReserved[F](value).handleErrorWith(_ => findInConsts(value))
       case a: Arithmetic => a.run
@@ -116,14 +121,14 @@ object Helpers {
     f: (String, Double, Double) => Unit,
     f2: (String, Int, Double) => Unit,
     f3: (Int, Double) => Unit
-  )(implicit M: Sync[F], consts: Consts) =
+  )(implicit M: MonadError[F, Throwable], consts: Consts) =
     for {
       scale <- getDouble(scale.value)
       run <- addr.value match {
         case DelayEnd(StringValue(value)) =>
           M.pure(f(value, 1.0, scale))
-        case MidpointDelay(StringValue(value)) =>
-          M.pure(f(value, 0.5, scale))
+        case MidpointDelay(value) =>
+          M.pure(f(value.value, 0.5, scale))
         case Addition(StringValue(value), DoubleValue(offset)) =>
           M.pure(f2(value, offset.toInt, scale))
         case StringValue(value) =>

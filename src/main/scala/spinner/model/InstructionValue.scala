@@ -1,6 +1,6 @@
 package spinner.model
 
-import cats.effect.Sync
+import cats.MonadError
 import spinner.Instruction.Consts
 
 sealed trait InstructionValue {
@@ -19,5 +19,5 @@ case class StringValue(value: String) extends InstructionValue {
 }
 
 trait Arithmetic extends InstructionValue {
-  def run[F[_]: Sync](implicit c: Consts): F[Double]
+  def run[F[_]](implicit c: Consts, M: MonadError[F, Throwable]): F[Double]
 }
