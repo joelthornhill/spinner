@@ -1,21 +1,23 @@
 package spinner
-import cats.effect.Resource
 import cats.effect.Sync
 import org.andrewkilpatrick.elmGen.simulator.SpinSimulator
 import cats.implicits._
 import org.andrewkilpatrick.elmGen.SpinProgram
 import org.andrewkilpatrick.elmGen.simulator
-import spinner.Instruction.Consts
 import spinner.model.DoubleValue
+import spinner.model.InstructionValue
 import spinner.model.StringValue
 import spinner.parsers.EquParser
 import spinner.parsers.SpinParser
 import spinner.util.Helpers
 import spinner.Params._
+import fs2._
 
 import scala.io.Source
 
 class Program[F[_]]()(implicit M: Sync[F]) extends SpinParser[F] with EquParser {
+
+  case class Result(consts: Map[String, InstructionValue], instruction: Instruction[F])
 
   private def removeComment(line: String) = {
     val index = line.indexOf(";")
@@ -25,57 +27,38 @@ class Program[F[_]]()(implicit M: Sync[F]) extends SpinParser[F] with EquParser 
   }
 
   private def checkDifference(
-    instructions: List[Instruction[F]],
-    lines: List[String]
-  ): F[List[Unit]] =
-    instructions
-      .map(_.spinInstruction().replaceAll("\\s", ""))
-      .zip(lines.map(_.replaceAll("\\s", "")))
-      .map {
-        case (instruction, spin) if instruction != spin =>
-          M.delay(println(s"$instruction did not equal $spin"))
-        case _ => M.unit
-      }
-      .sequence
+    line: String,
+    instruction: Instruction[F]
+  ): F[Unit] = {
+    val l = line.replaceAll("\\s", "")
+    val i = instruction.spinInstruction().replaceAll("\\s", "")
 
-  private def printSpin(
-    instructions: List[Instruction[F]]
-  ): F[List[Unit]] = {
-    instructions.map(_.spinInstruction()).map(i => M.delay(println(i))).sequence
+    if (l != i) M.delay(println(s"$i did not equal $l"))
+    else M.unit
   }
 
-//  private def printInstructions(
-//    instructions: List[Instruction[F]]
-//  ): F[List[Unit]] =
-//    calculateSkip(instructions).map(i => M.delay(println(i))).sequence
+  private def calcSkip(s: Stream[F, Result]) = {
+    val withIndex = s.zipWithIndex
 
-  private def calculateSkip(
-    instructions: List[Instruction[F]]
-  ): List[Instruction[F]] =
-    instructions.mapWithIndex {
-      case (i, j) =>
-        i match {
+    def findIndex(value: String): Stream[F, Long] =
+      withIndex
+        .find(_._1.instruction match {
+          case skipLabel: SkipLabel[F] => skipLabel.label == value
+          case _                       => false
+        })
+        .map(_._2)
+
+    withIndex.flatMap {
+      case (result, j) =>
+        result.instruction match {
           case Skp(flags, NSkip(StringValue(value))) =>
-            val index = instructions.indexWhere {
-              case skipLabel: SkipLabel[F] => skipLabel.label == value
-              case _                       => false
+            findIndex(value).map { index =>
+              if (index > 0)
+                result.copy(instruction = Skp(flags, NSkip(DoubleValue((index - j).toDouble))))
+              else result
             }
-
-            if (index > 0) Skp(flags, NSkip(DoubleValue((index - j).toDouble)))
-            else i
-          case _ => i
+          case _ => Stream.emit(result)
         }
-    }
-
-  private def runInstructions(
-    instructions: List[Instruction[F]]
-  )(implicit consts: Consts) = {
-    calculateSkip(instructions).foldLeft(M.pure(new Spin(consts))) {
-      case (acc, curr) =>
-        for {
-          update <- Helpers.updateProgram(curr).runF
-          program <- acc.flatMap(update)
-        } yield program._1
     }
   }
 
@@ -89,70 +72,74 @@ class Program[F[_]]()(implicit M: Sync[F]) extends SpinParser[F] with EquParser 
 
   private def handleResult[T](
     parseResult: ParseResult[T],
-    index: Int,
-    linesWithIndex: List[(String, Int)]
+    line: String
   ): F[T] =
     parseResult match {
       case Success(matched, _) => M.pure(matched)
       case NoSuccess(reason, _) =>
         M.raiseError(
           new Exception(
-            s"Could not parse: ${linesWithIndex.find(_._2 == index).map(_._1).getOrElse(reason)}"
+            s"Could not parse: $line, $reason"
           )
         )
     }
 
-  private def parseLines[T](
-    linesWithIndex: List[(String, Int)],
-    parser: Parser[T]
-  ): F[List[ParseResult[T]]] =
-    linesWithIndex
-      .sortBy(_._2)
-      .map(line => M.delay(parse(parser, line._1)))
-      .sequence
+  private def parseAndHandleResult[T](line: String, parser: Parser[T]): F[T] =
+    M.delay(parse(parser, line)).flatMap(parseResult => handleResult(parseResult, line))
 
-  private def constants(linesWithIndex: List[(String, Int)]): F[Consts] =
-    parseLines(linesWithIndex, equParser)
-      .flatMap(_.mapWithIndex { case (r, i) => handleResult(r, i, linesWithIndex) }.sequence)
-      .map(_.flatten.toMap)
+  private def fileContents(filePath: String): Stream[F, String] =
+    Stream
+      .bracket(M.delay(Source.fromFile(filePath)))(s => M.delay(s.close()))
+      .map(_.getLines().mkString("\n"))
 
-  private def spinParse(
-    linesWithIndex: List[(String, Int)]
-  ): F[List[Instruction[F]]] =
-    parseLines(linesWithIndex, parsed)
-      .flatMap(_.mapWithIndex { case (r, i) => handleResult(r, i, linesWithIndex) }.sequence)
-
-  private def fileContents(filePath: String): F[String] =
-    Resource
-      .fromAutoCloseable(M.delay(Source.fromFile(filePath)))
-      .use(source => M.delay(source.getLines.mkString("\n")))
-
-  private def runSimulator(program: SpinProgram, testWav: String): Resource[F, SpinSimulator] = {
+  private def runSimulator(program: SpinProgram, testWav: String) = {
     val acquire: F[SpinSimulator] =
       M.delay(new simulator.SpinSimulator(program, testWav, null, 0.5, 0.5, 0.5))
     val release: SpinSimulator => F[Unit] = simulator =>
       M.delay(println("Stopping simulator")) >> M.delay(simulator.stopSimulator())
-    val simulatorResource = Resource.make(acquire)(release)
 
-    for {
-      sim <- simulatorResource
-      _ = sim.showInteractiveControls()
-      _ = sim.showLevelLogger()
-      _ = sim.setLoopMode(true)
-    } yield sim
+    Stream
+      .bracket(acquire)(release)
+      .evalTap(sim =>
+        M.delay {
+          sim.showInteractiveControls()
+          sim.showLevelLogger()
+          sim.setLoopMode(true)
+        }
+      )
+      .evalMap(s => M.delay(s.run()))
   }
 
-  def run(testWav: String, spinPath: String): F[Unit] =
+  private def accInstructions(
+    results: List[Result]
+  ): Stream[F, Spin] = {
+    val instructions: Stream[F, Instruction[F]] = Stream.emits(results.map(_.instruction))
+    val consts: Map[String, InstructionValue] = results.flatMap(_.consts).toMap
+
+    instructions.evalScan(new Spin(consts))((acc, i) =>
+      Helpers.updateProgram(i).runF.flatMap(f => f(acc)).map(_._1)
+    )
+  }
+
+  private def handleLine(line: String): F[Result] =
     for {
-      file <- fileContents(spinPath)
-      lines = getLines(file).zipWithIndex
-      consts <- constants(lines)
-      program = new Spin(consts)
-      parsed <- spinParse(lines)
-      _ <- printSpin(parsed)
-//      _ <- printInstructions(parsed)
-      run <- runInstructions(parsed)(consts)
-      _ <- checkDifference(parsed, lines.map(_._1))
-      _ <- runSimulator(run, testWav).use(s => M.delay(s.run()))
-    } yield ()
+      consts <- parseAndHandleResult(line, equParser)
+      parseResult <- parseAndHandleResult(line, parsed)
+      _ <- checkDifference(line, parseResult)
+      _ <- M.delay(println(parseResult.spinInstruction()))
+    } yield Result(consts, parseResult)
+
+  def run(testWav: String, spinPath: String): F[Unit] = {
+
+    val instructions: Stream[F, Result] =
+      fileContents(spinPath).flatMap(file => Stream.emits(getLines(file))).evalMap(handleLine)
+
+    calcSkip(instructions).compile.toList.flatMap(
+      accInstructions(_)
+        .takeRight(1)
+        .flatMap(runSimulator(_, testWav))
+        .compile
+        .drain
+    )
+  }
 }

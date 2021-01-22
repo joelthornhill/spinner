@@ -2,7 +2,6 @@ package spinner
 import cats.effect.ExitCode
 import cats.effect.IO
 import cats.effect.IOApp
-import cats.implicits._
 
 object App extends IOApp {
 
